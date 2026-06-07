@@ -1,0 +1,37 @@
+{
+    "name": "@smooai/deploy",
+    "version": "0.1.0",
+    "description": "Shared SmooAI deploy primitives — reusable SST v4 constructs (API Gateway WebSocket + Rust Lambda + DynamoDB single-table + S3 blob bucket + S3 Vectors placeholder). Consumed by smooth-operator-agent and dogfooded by smooai.",
+    "license": "MIT",
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./components/smooth-agent-api": "./src/components/smooth-agent-api.ts",
+        "./components/websocket-lambda-api": "./src/components/websocket-lambda-api.ts",
+        "./components/dynamo-single-table": "./src/components/dynamo-single-table.ts"
+    },
+    "files": [
+        "src"
+    ],
+    "scripts": {
+        "typecheck": "tsc --noEmit"
+    },
+    "peerDependencies": {
+        "sst": ">=4.13.0 <5"
+    },
+    "devDependencies": {
+        "@types/node": "22.10.5",
+        "sst": "4.13.0",
+        "typescript": "5.7.3"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/SmooAI/deploy.git",
+        "directory": "sst"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

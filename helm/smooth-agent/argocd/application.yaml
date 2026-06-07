@@ -1,0 +1,87 @@
+# ArgoCD Application for the shared `smooth-agent` Helm chart.
+#
+# Templated for ANY consuming repo/path — replace the REPLACE_ME placeholders
+# (or render via your app-of-apps / envsubst). Two common layouts:
+#
+#   A) Chart lives in SmooAI/deploy, values overlaid per consumer:
+#        source.repoURL: https://github.com/SmooAI/deploy
+#        source.path:    helm/smooth-agent
+#        source.helm.valuesObject: <your per-env overrides>
+#
+#   B) Consumer vendors a thin overlay that points at this chart as a
+#      dependency; then repoURL/path target the CONSUMER repo.
+#
+# Mirrors the smooai api-prime / ArgoCD pattern: automated sync (prune +
+# selfHeal), CreateNamespace, a sync-wave annotation, and a retry/backoff.
+# Apply into the ArgoCD namespace:
+#   kubectl apply -n argocd -f argocd/application.yaml
+#
+# Image-tag wiring: pin via the `image.tag` value below, or let ArgoCD Image
+# Updater manage it (add the standard `argocd-image-updater.argoproj.io/*`
+# annotations once a registry tag policy is chosen — matching smooai's
+# api-prime setup). Secrets should come from an external secret
+# (gateway.keySecretRef / database.urlSecretRef) rather than inline here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smooth-agent
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # REPLACE_ME: the repo holding the chart (or your overlay). Defaults below
+    # target the shared chart in SmooAI/deploy.
+    repoURL: https://github.com/SmooAI/deploy
+    targetRevision: main
+    path: helm/smooth-agent
+    helm:
+      releaseName: smooth-agent
+      # Per-environment overrides. Secrets come from an external secret
+      # (gateway.keySecretRef / database.urlSecretRef) — never inline here.
+      valuesObject:
+        replicaCount: 2
+        image:
+          repository: ghcr.io/smooai/smooth-operator-agent   # REPLACE_ME per consumer
+          tag: ""          # pin an immutable tag/digest in prod
+        gateway:
+          url: https://llm.smoo.ai/v1
+          model: claude-haiku-4-5
+          keySecretRef:
+            name: smooth-agent-gateway
+            key: SMOOAI_GATEWAY_KEY
+        database:
+          # External pgvector-enabled Postgres. The referenced secret must
+          # carry the connection string under this key.
+          urlSecretRef:
+            name: smooth-agent-db
+            key: DATABASE_URL
+        postgres:
+          external: true
+        ingress:
+          enabled: true
+          className: nginx
+          host: smooth-agent.smoo.ai     # REPLACE_ME per consumer
+          path: /ws
+          tls:
+            enabled: true
+            secretName: smooth-agent-tls
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smooai-smooth-agent       # REPLACE_ME per consumer
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

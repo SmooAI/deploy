@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smooth-agent.fullname" . }}
+  labels:
+    {{- include "smooth-agent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: ws
+      port: {{ .Values.service.port }}
+      targetPort: ws
+      protocol: TCP
+  selector:
+    {{- include "smooth-agent.selectorLabels" . | nindent 4 }}

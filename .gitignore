@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# SST
+.sst/
+sst-env.d.ts
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Helm
+*.tgz
+charts/*.tgz
+
+# Editor / OS
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# Env
+.env
+.env.*
+!.env.example
