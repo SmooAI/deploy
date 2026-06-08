@@ -2,16 +2,16 @@
 # All overridable per-environment via `helm install -f my-values.yaml`,
 # `--set ...`, or ArgoCD `helm.valuesObject` (see argocd/application.yaml).
 #
-# Consumers (smooth-operator-agent, smooai) typically ship a thin values
+# Consumers (smooth-operator, smooai) typically ship a thin values
 # overlay that sets image.repository/tag, the gateway/database secret refs, and
-# ingress.host — see deploy/k8s/values.yaml in smooth-operator-agent.
+# ingress.host — see deploy/k8s/values.yaml in smooth-operator.
 
 replicaCount: 2
 
 image:
-  # Image build is cross-repo for smooth-operator-agent (see its Dockerfile
+  # Image build is cross-repo for smooth-operator (see its Dockerfile
   # header + README). Point this at your registry.
-  repository: ghcr.io/smooai/smooth-operator-agent
+  repository: ghcr.io/smooai/smooth-operator
   # Prefer an immutable tag/digest in prod. ArgoCD Image Updater can manage this.
   tag: ""        # defaults to .Chart.AppVersion when empty
   pullPolicy: IfNotPresent
@@ -65,8 +65,8 @@ server:
   maxIterations: 6
   # SMOOTH_AGENT_MAX_TOKENS — max_tokens sent to the gateway.
   maxTokens: 512
-  # RUST_LOG — tracing filter. Falls back to "info,smooth_operator_agent_server=info".
-  rustLog: "info,smooth_operator_agent_server=info"
+  # RUST_LOG — tracing filter. Falls back to "info,smooth_operator_server=info".
+  rustLog: "info,smooth_operator_server=info"
   # Extra raw env vars (list of {name, value}) merged into the container.
   extraEnv: []
 

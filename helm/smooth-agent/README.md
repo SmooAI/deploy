@@ -6,7 +6,7 @@ axum `/ws` server speaking the schema-driven protocol over a smooth-operator
 vectors), fronted by an Ingress with WebSocket-friendly settings, and synced by
 ArgoCD.
 
-This is the shared chart extracted from `smooth-operator-agent/deploy/k8s` into
+This is the shared chart extracted from `smooth-operator/deploy/k8s` into
 [`SmooAI/deploy`](https://github.com/SmooAI/deploy). It is the Kubernetes /
 self-host half of the dual SST-(AWS)/k8s plan; the AWS-serverless half is the
 `@smooai/deploy` SST constructs in `../../sst`.
@@ -42,7 +42,7 @@ helm template smooth-agent helm/smooth-agent
 
 helm upgrade --install smooth-agent helm/smooth-agent \
   --namespace smooai-smooth-agent --create-namespace \
-  --set image.repository=ghcr.io/smooai/smooth-operator-agent \
+  --set image.repository=ghcr.io/smooai/smooth-operator \
   --set image.tag=0.1.0 \
   --set gateway.keySecretRef.name=smooth-agent-gateway \
   --set database.urlSecretRef.name=smooth-agent-db \
@@ -54,7 +54,7 @@ helm upgrade --install smooth-agent helm/smooth-agent \
 
 ### B) As a dependency / values overlay
 
-A consuming repo (e.g. `smooth-operator-agent`) can ship a **thin values
+A consuming repo (e.g. `smooth-operator`) can ship a **thin values
 overlay** and reference this chart as a Helm dependency:
 
 ```yaml
@@ -168,7 +168,7 @@ kubectl apply -n argocd -f argocd/application.yaml
 
 ## ⚠️ Server bind follow-up (consumer-side)
 
-The smooth-operator-agent server historically bound `127.0.0.1`, unreachable
+The smooth-operator server historically bound `127.0.0.1`, unreachable
 from inside the cluster. This chart sets `SMOOTH_AGENT_BIND: "0.0.0.0"` in the
 ConfigMap; the server must honor `SMOOTH_AGENT_BIND` (default `127.0.0.1`
 locally) for in-cluster traffic to reach the pod. See the consuming repo's

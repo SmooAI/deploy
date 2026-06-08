@@ -7,7 +7,7 @@ description: |
   Kubernetes / self-host deploy path. Fronted by an Ingress with WebSocket
   annotations and synced by ArgoCD.
 
-  This is the shared chart extracted from smooth-operator-agent/deploy/k8s into
+  This is the shared chart extracted from smooth-operator/deploy/k8s into
   SmooAI/deploy. Consumers either `helm install` it directly, use it as a
   dependency (file:// or an OCI/HTTP repo), or maintain a thin values overlay
   pointing at it.
@@ -19,7 +19,7 @@ appVersion: "0.1.0"
 home: https://github.com/SmooAI/deploy
 sources:
   - https://github.com/SmooAI/deploy
-  - https://github.com/SmooAI/smooth-operator-agent
+  - https://github.com/SmooAI/smooth-operator
 keywords:
   - smooth-operator
   - websocket

@@ -8,7 +8,7 @@ import { WebSocketLambdaApi, type RouteSpec } from './websocket-lambda-api';
  * gateway-key secret + the IAM links between them.
  *
  * This is the construct extracted from
- * `smooth-operator-agent/deploy/sst/sst.config.ts`. The app-specific bits are
+ * `smooth-operator/deploy/sst/sst.config.ts`. The app-specific bits are
  * parameterized: the prebuilt Lambda artifact dir, the model id, the gateway
  * key/url secret refs, the table/bucket logical names, and the per-org config.
  * Everything else (overloaded-key table, route table, post-back permission, S3
@@ -78,7 +78,7 @@ export interface SmoothAgentApiOutputs {
 }
 
 /**
- * Compose the full smooth-operator-agent serverless backend.
+ * Compose the full smooth-operator serverless backend.
  *
  * Authored as a class so consumers use the SST-component `new` form
  * (`new SmoothAgentApi('SmoothAgent', { … })`) and can read the sub-resources
@@ -86,7 +86,7 @@ export interface SmoothAgentApiOutputs {
  *
  * @example
  *   const agent = new SmoothAgentApi('SmoothAgent', {
- *       artifactDir: '../../rust/target/lambda/smooai-smooth-operator-agent-lambda',
+ *       artifactDir: '../../rust/target/lambda/smooai-smooth-operator-lambda',
  *       model: 'claude-haiku-4-5',
  *   });
  *   return agent.outputs;

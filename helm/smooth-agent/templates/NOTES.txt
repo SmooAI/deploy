@@ -1,4 +1,4 @@
-smooth-operator-agent has been deployed.
+smooth-operator has been deployed.
 
 Release:   {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
@@ -37,5 +37,5 @@ Config / secrets:
 {{- end }}
 
 REMINDER (0.0.0.0 bind follow-up): the server currently binds 127.0.0.1 in
-rust/smooth-operator-agent-server/src/server.rs. Until that one-liner ships,
+rust/smooth-operator-server/src/server.rs. Until that one-liner ships,
 in-cluster Service/Ingress traffic CANNOT reach the pod. See deploy/k8s/README.md.

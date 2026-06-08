@@ -14,7 +14,7 @@
  * plus one all-projecting GSI (`gsi1`) over `gsi1pk`/`gsi1sk`, with a `ttl`
  * attribute powering the `$connect`/`$disconnect` connection-registry rows.
  *
- * Factored out of `smooth-operator-agent/deploy/sst/sst.config.ts` so any SmooAI
+ * Factored out of `smooth-operator/deploy/sst/sst.config.ts` so any SmooAI
  * SST app can adopt the same overloaded-key table without re-deriving the field
  * map. PAY_PER_REQUEST is SST's `Dynamo` default.
  *

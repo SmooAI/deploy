@@ -1,6 +1,6 @@
 # Consuming `@smooai/deploy`
 
-How the two consumers — `smooth-operator-agent` and the `smooai` monorepo — wire
+How the two consumers — `smooth-operator` and the `smooai` monorepo — wire
 up the shared deploy primitives.
 
 ---
@@ -44,12 +44,12 @@ Import there, not at module top-level if your SST version is strict about it:
 /// <reference path="./.sst/platform/config.d.ts" />
 export default $config({
     app(input) {
-        return { name: 'smooth-operator-agent', home: 'aws', /* … */ };
+        return { name: 'smooth-operator', home: 'aws', /* … */ };
     },
     async run() {
         const { SmoothAgentApi } = await import('@smooai/deploy');
         const agent = new SmoothAgentApi('SmoothAgent', {
-            artifactDir: '../../rust/target/lambda/smooai-smooth-operator-agent-lambda',
+            artifactDir: '../../rust/target/lambda/smooai-smooth-operator-lambda',
         });
         return agent.outputs;
     },
@@ -57,7 +57,7 @@ export default $config({
 ```
 
 > A top-level `import { SmoothAgentApi } from '@smooai/deploy'` also works under
-> SST v4 (the bundler hoists it). smooth-operator-agent uses the top-level form;
+> SST v4 (the bundler hoists it). smooth-operator uses the top-level form;
 > the smooai monorepo uses `await import()` inside `run()` to match its
 > "no top-level imports in sst.config.ts" convention.
 
@@ -97,7 +97,7 @@ A consumer ships a tiny `Chart.yaml` declaring this chart as a dependency and a
 ```yaml
 # consumer/deploy/k8s/Chart.yaml
 apiVersion: v2
-name: smooth-operator-agent
+name: smooth-operator
 version: 0.1.0
 dependencies:
   - name: smooth-agent
@@ -111,16 +111,16 @@ dependencies:
 # consumer/deploy/k8s/values.yaml  (overrides nested under the subchart name)
 smooth-agent:
   image:
-    repository: ghcr.io/smooai/smooth-operator-agent
+    repository: ghcr.io/smooai/smooth-operator
     tag: "0.1.0"
   gateway:
-    keySecretRef: { name: smooth-operator-agent-gateway, key: SMOOAI_GATEWAY_KEY }
+    keySecretRef: { name: smooth-operator-gateway, key: SMOOAI_GATEWAY_KEY }
   database:
-    urlSecretRef: { name: smooth-operator-agent-db, key: DATABASE_URL }
+    urlSecretRef: { name: smooth-operator-db, key: DATABASE_URL }
   ingress:
     enabled: true
     className: nginx
-    host: smooth-operator-agent.smoo.ai
+    host: smooth-operator.smoo.ai
 ```
 
 then `helm dependency update consumer/deploy/k8s && helm install ...`.

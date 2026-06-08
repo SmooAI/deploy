@@ -13,7 +13,7 @@
  * API Gateway Management API (`execute-api:ManageConnections`) — granted here by
  * default.
  *
- * Factored out of `smooth-operator-agent/deploy/sst/sst.config.ts`.
+ * Factored out of `smooth-operator/deploy/sst/sst.config.ts`.
  */
 
 /**

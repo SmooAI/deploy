@@ -1,7 +1,7 @@
 # SmooAI `deploy` — shared deploy primitives
 
 Reusable deploy building blocks for SmooAI services, extracted from
-[`smooth-operator-agent/deploy`](https://github.com/SmooAI/smooth-operator-agent).
+[`smooth-operator/deploy`](https://github.com/SmooAI/smooth-operator).
 Two surfaces, one per deploy path:
 
 | Surface | Path | What it is |
@@ -11,7 +11,7 @@ Two surfaces, one per deploy path:
 
 **Two consumers** justify the shared package:
 
-1. [`smooth-operator-agent`](https://github.com/SmooAI/smooth-operator-agent) —
+1. [`smooth-operator`](https://github.com/SmooAI/smooth-operator) —
    the reference WebSocket agent service (consumes both surfaces today).
 2. The **smooai monorepo** — dogfoods the SST constructs piecemeal once proven.
 
@@ -26,7 +26,7 @@ See [`docs/`](docs) for how each consumer wires it up.
 import { SmoothAgentApi } from '@smooai/deploy';
 
 const agent = SmoothAgentApi('SmoothAgent', {
-    artifactDir: '../../rust/target/lambda/smooai-smooth-operator-agent-lambda',
+    artifactDir: '../../rust/target/lambda/smooai-smooth-operator-lambda',
     model: 'claude-haiku-4-5',
 });
 return agent.outputs;
