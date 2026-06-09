@@ -1,5 +1,5 @@
 apiVersion: v2
-name: smooth-agent
+name: smooth-operator
 description: |
   Reusable Helm chart for a smooth-operator-style WebSocket agent service —
   an axum `/ws` server speaking the schema-driven protocol over a

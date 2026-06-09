@@ -1,11 +1,11 @@
-# ArgoCD Application for the shared `smooth-agent` Helm chart.
+# ArgoCD Application for the shared `smooth-operator` Helm chart.
 #
 # Templated for ANY consuming repo/path — replace the REPLACE_ME placeholders
 # (or render via your app-of-apps / envsubst). Two common layouts:
 #
 #   A) Chart lives in SmooAI/deploy, values overlaid per consumer:
 #        source.repoURL: https://github.com/SmooAI/deploy
-#        source.path:    helm/smooth-agent
+#        source.path:    helm/smooth-operator
 #        source.helm.valuesObject: <your per-env overrides>
 #
 #   B) Consumer vendors a thin overlay that points at this chart as a
@@ -24,7 +24,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: smooth-agent
+  name: smooth-operator
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
@@ -37,9 +37,9 @@ spec:
     # target the shared chart in SmooAI/deploy.
     repoURL: https://github.com/SmooAI/deploy
     targetRevision: main
-    path: helm/smooth-agent
+    path: helm/smooth-operator
     helm:
-      releaseName: smooth-agent
+      releaseName: smooth-operator
       # Per-environment overrides. Secrets come from an external secret
       # (gateway.keySecretRef / database.urlSecretRef) — never inline here.
       valuesObject:
@@ -51,27 +51,27 @@ spec:
           url: https://llm.smoo.ai/v1
           model: claude-haiku-4-5
           keySecretRef:
-            name: smooth-agent-gateway
+            name: smooth-operator-gateway
             key: SMOOAI_GATEWAY_KEY
         database:
           # External pgvector-enabled Postgres. The referenced secret must
           # carry the connection string under this key.
           urlSecretRef:
-            name: smooth-agent-db
+            name: smooth-operator-db
             key: DATABASE_URL
         postgres:
           external: true
         ingress:
           enabled: true
           className: nginx
-          host: smooth-agent.smoo.ai     # REPLACE_ME per consumer
+          host: smooth-operator.smoo.ai  # REPLACE_ME per consumer
           path: /ws
           tls:
             enabled: true
-            secretName: smooth-agent-tls
+            secretName: smooth-operator-tls
   destination:
     server: https://kubernetes.default.svc
-    namespace: smooai-smooth-agent       # REPLACE_ME per consumer
+    namespace: smooai-smooth-operator    # REPLACE_ME per consumer
   syncPolicy:
     automated:
       prune: true

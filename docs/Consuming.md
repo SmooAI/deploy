@@ -79,15 +79,15 @@ standard layout. Run `pnpm install` in the consumer's `deploy/sst`.
 
 ---
 
-## 2. Helm chart (`smooth-agent`)
+## 2. Helm chart (`smooth-operator`)
 
 The chart is self-contained and reusable. Consumers pick one of:
 
 ### A) `helm install` the chart directly
 
-Point at this repo's `helm/smooth-agent` (or a published OCI/HTTP repo) and pass
+Point at this repo's `helm/smooth-operator` (or a published OCI/HTTP repo) and pass
 a values overlay / `--set`s. See
-[`helm/smooth-agent/README.md`](../helm/smooth-agent/README.md).
+[`helm/smooth-operator/README.md`](../helm/smooth-operator/README.md).
 
 ### B) Thin values overlay as a chart dependency
 
@@ -100,16 +100,16 @@ apiVersion: v2
 name: smooth-operator
 version: 0.1.0
 dependencies:
-  - name: smooth-agent
+  - name: smooth-operator
     version: 0.1.x
-    repository: file://../../../deploy/helm/smooth-agent   # local path dep
+    repository: file://../../../deploy/helm/smooth-operator   # local path dep
     # or, once published:
     # repository: oci://ghcr.io/smooai/charts
 ```
 
 ```yaml
 # consumer/deploy/k8s/values.yaml  (overrides nested under the subchart name)
-smooth-agent:
+smooth-operator:
   image:
     repository: ghcr.io/smooai/smooth-operator
     tag: "0.1.0"
@@ -127,9 +127,9 @@ then `helm dependency update consumer/deploy/k8s && helm install ...`.
 
 ### ArgoCD
 
-`helm/smooth-agent/argocd/application.yaml` is a **templated** `Application`
+`helm/smooth-operator/argocd/application.yaml` is a **templated** `Application`
 (REPLACE_ME placeholders for repo/path/host/namespace). Point `source.repoURL`
-+ `source.path` at either this repo (`SmooAI/deploy`, `helm/smooth-agent`) or
++ `source.path` at either this repo (`SmooAI/deploy`, `helm/smooth-operator`) or
 your overlay repo, fill the `valuesObject` overrides, and `kubectl apply -n
 argocd -f`.
 
@@ -140,7 +140,7 @@ argocd -f`.
 Today both surfaces are consumed via **local path deps** (sibling checkout):
 
 - SST: `"@smooai/deploy": "file:../../deploy/sst"`
-- Helm: `repository: file://../../deploy/helm/smooth-agent`
+- Helm: `repository: file://../../deploy/helm/smooth-operator`
 
 To decouple consumers from a sibling checkout:
 
@@ -150,7 +150,7 @@ To decouple consumers from a sibling checkout:
    - Decide whether to ship raw TS (SST bundles consumer configs, so `main`/
      `types` pointing at `src/*.ts` is workable) or pre-built `.js`/`.d.ts`.
      Raw-TS keeps the build trivial; a `tsc` build step is the safer npm norm.
-2. **Publish the `smooth-agent` chart** to an OCI registry
+2. **Publish the `smooth-operator` chart** to an OCI registry
    (`oci://ghcr.io/smooai/charts`) or an HTTP Helm repo, so dependency
    `repository:` can be a real URL and consumers `helm dependency update` from
    a versioned source.

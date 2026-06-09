@@ -1,4 +1,4 @@
-# `smooth-agent` Helm chart
+# `smooth-operator` Helm chart
 
 Reusable Helm chart for a smooth-operator-style WebSocket agent service — an
 axum `/ws` server speaking the schema-driven protocol over a smooth-operator
@@ -12,7 +12,7 @@ self-host half of the dual SST-(AWS)/k8s plan; the AWS-serverless half is the
 `@smooai/deploy` SST constructs in `../../sst`.
 
 ```
-helm/smooth-agent/
+helm/smooth-operator/
 ├── Chart.yaml
 ├── values.yaml
 ├── templates/
@@ -37,18 +37,18 @@ helm/smooth-agent/
 ### A) `helm install` directly
 
 ```bash
-helm lint helm/smooth-agent
-helm template smooth-agent helm/smooth-agent
+helm lint helm/smooth-operator
+helm template smooth-operator helm/smooth-operator
 
-helm upgrade --install smooth-agent helm/smooth-agent \
-  --namespace smooai-smooth-agent --create-namespace \
+helm upgrade --install smooth-operator helm/smooth-operator \
+  --namespace smooai-smooth-operator --create-namespace \
   --set image.repository=ghcr.io/smooai/smooth-operator \
   --set image.tag=0.1.0 \
-  --set gateway.keySecretRef.name=smooth-agent-gateway \
-  --set database.urlSecretRef.name=smooth-agent-db \
+  --set gateway.keySecretRef.name=smooth-operator-gateway \
+  --set database.urlSecretRef.name=smooth-operator-db \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
-  --set ingress.host=smooth-agent.smoo.ai \
+  --set ingress.host=smooth-operator.smoo.ai \
   --set ingress.tls.enabled=true
 ```
 
@@ -60,9 +60,9 @@ overlay** and reference this chart as a Helm dependency:
 ```yaml
 # Chart.yaml in the consumer
 dependencies:
-  - name: smooth-agent
+  - name: smooth-operator
     version: 0.1.x
-    repository: file://../../deploy/helm/smooth-agent   # local path dep
+    repository: file://../../deploy/helm/smooth-operator   # local path dep
     # or an OCI/HTTP repo once published, e.g.
     # repository: oci://ghcr.io/smooai/charts
 ```
@@ -100,20 +100,20 @@ Two secrets feed the server: the **gateway key** (`SMOOAI_GATEWAY_KEY`) and the
 ### Recommended (prod): reference an existing Secret
 
 ```bash
-kubectl create secret generic smooth-agent-gateway \
-  --namespace smooai-smooth-agent \
+kubectl create secret generic smooth-operator-gateway \
+  --namespace smooai-smooth-operator \
   --from-literal=SMOOAI_GATEWAY_KEY="$GATEWAY_KEY"
 
-kubectl create secret generic smooth-agent-db \
-  --namespace smooai-smooth-agent \
+kubectl create secret generic smooth-operator-db \
+  --namespace smooai-smooth-operator \
   --from-literal=DATABASE_URL="postgresql://user:pass@pg-host:5432/smooth?sslmode=require"
 ```
 
 ```yaml
 gateway:
-  keySecretRef: { name: smooth-agent-gateway, key: SMOOAI_GATEWAY_KEY }
+  keySecretRef: { name: smooth-operator-gateway, key: SMOOAI_GATEWAY_KEY }
 database:
-  urlSecretRef: { name: smooth-agent-db, key: DATABASE_URL }
+  urlSecretRef: { name: smooth-operator-db, key: DATABASE_URL }
 ```
 
 ### Dev only: inline values

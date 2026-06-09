@@ -20,7 +20,7 @@
 `@smooai/deploy` packages the **deploy primitives** for a [smooth-operator](https://github.com/SmooAI/smooth-operator)-style agent so you don't hand-roll them per service. It gives you two production-shaped paths off the same conventions:
 
 - **AWS serverless** — `new SmoothAgentApi(...)`: an API Gateway WebSocket + (Rust) Lambda + DynamoDB single table + S3 blob bucket + S3 Vectors wiring + gateway-key secret + IAM links, as a single parameterized SST component.
-- **Kubernetes / self-host** — the `smooth-agent` Helm chart: an axum `/ws` server backed by pgvector Postgres, fronted by a WebSocket-friendly Ingress, synced by ArgoCD.
+- **Kubernetes / self-host** — the `smooth-operator` Helm chart: an axum `/ws` server backed by pgvector Postgres, fronted by a WebSocket-friendly Ingress, synced by ArgoCD.
 
 Two real consumers justify the shared package: **smooth-operator** (the reference WebSocket agent service, uses both surfaces today) and the **smooai monorepo** (dogfoods the SST constructs piecemeal).
 
@@ -50,14 +50,14 @@ One `new SmoothAgentApi(...)` stands up the whole serverless backend and wires t
 ### Kubernetes — one `helm install`
 
 ```bash
-helm upgrade --install smooth-agent helm/smooth-agent \
-  --namespace smooai-smooth-agent --create-namespace \
+helm upgrade --install smooth-operator helm/smooth-operator \
+  --namespace smooai-smooth-operator --create-namespace \
   --set image.tag=0.1.0 \
-  --set gateway.keySecretRef.name=smooth-agent-gateway \
-  --set database.urlSecretRef.name=smooth-agent-db
+  --set gateway.keySecretRef.name=smooth-operator-gateway \
+  --set database.urlSecretRef.name=smooth-operator-db
 ```
 
-> Postgres with the **pgvector** extension is an external dependency (the chart does not vendor a Postgres pod). Point `database.urlSecretRef` at a pgvector-enabled database — see [`helm/smooth-agent/README.md`](helm/smooth-agent/README.md).
+> Postgres with the **pgvector** extension is an external dependency (the chart does not vendor a Postgres pod). Point `database.urlSecretRef` at a pgvector-enabled database — see [`helm/smooth-operator/README.md`](helm/smooth-operator/README.md).
 
 ---
 
@@ -91,7 +91,7 @@ Defaults are sensible: the WebSocket route table covers `$connect`, `$disconnect
 | --- | --- |
 | **One construct**, whole serverless backend | `SmoothAgentApi`: WS API + Lambda + Dynamo + S3 + Vectors + secret + IAM |
 | **Composable** primitives | `WebSocketLambdaApi`, `DynamoSingleTable` exported independently |
-| **A Kubernetes path too** | the `smooth-agent` Helm chart + ArgoCD `Application` |
+| **A Kubernetes path too** | the `smooth-operator` Helm chart + ArgoCD `Application` |
 | **No copy-paste between services** | the smooth-operator deploy logic, extracted and parameterized |
 | **Safe-by-default pods** | non-root, read-only rootfs, dropped caps, seccomp `RuntimeDefault` |
 | **WebSocket-aware Ingress** | long proxy timeouts + websocket annotations baked into chart defaults |
@@ -118,7 +118,7 @@ flowchart TB
         LAM --> SEC
     end
 
-    subgraph k8s["Kubernetes / self-host · smooth-agent Helm chart"]
+    subgraph k8s["Kubernetes / self-host · smooth-operator Helm chart"]
         ING[WebSocket Ingress]
         DEP[axum /ws Deployment]
         PG[("pgvector Postgres<br/>external")]
@@ -169,8 +169,8 @@ Verify locally (no AWS creds, no deploy):
 cd sst && pnpm install && pnpm sst install && npx tsc --noEmit
 
 # Helm chart
-helm lint helm/smooth-agent
-helm template smooth-agent helm/smooth-agent
+helm lint helm/smooth-operator
+helm template smooth-operator helm/smooth-operator
 ```
 
 > The full quality pyramid spans repos: the engine's **408 unit tests + LLM-as-judge evals** (which caught a multi-turn defect that scored 1/5 → fixed → 5/5) and the widget's **live Playwright e2e** sit above this package's static + smoke verification.
@@ -200,11 +200,11 @@ helm template smooth-agent helm/smooth-agent
 
 ---
 
-## Helm chart (`smooth-agent`)
+## Helm chart (`smooth-operator`)
 
 ```bash
-helm lint helm/smooth-agent
-helm template smooth-agent helm/smooth-agent
+helm lint helm/smooth-operator
+helm template smooth-operator helm/smooth-operator
 ```
 
 - **pgvector Postgres** is external (`postgres.external: true`) — point `database.urlSecretRef` at a pgvector-enabled database (`pgvector/pgvector:pg16`, CloudNativePG, RDS with pgvector).
@@ -212,7 +212,7 @@ helm template smooth-agent helm/smooth-agent
 - **WebSocket Ingress** ships with long proxy timeouts + websocket annotations (nginx defaults; ALB notes in the chart README).
 - **Hardened pods**: non-root, read-only rootfs, dropped capabilities, seccomp `RuntimeDefault`.
 
-See [`helm/smooth-agent/README.md`](helm/smooth-agent/README.md) for the pgvector requirement, secret wiring, Ingress notes, and ArgoCD.
+See [`helm/smooth-operator/README.md`](helm/smooth-operator/README.md) for the pgvector requirement, secret wiring, Ingress notes, and ArgoCD.
 
 ---
 

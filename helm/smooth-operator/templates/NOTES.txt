@@ -14,7 +14,7 @@ Reachable via Ingress at:
 {{- else }}
 
 Ingress is disabled. Port-forward to test locally:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooth-agent.fullname" . }} 8787:{{ .Values.service.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooth-operator.fullname" . }} 8787:{{ .Values.service.port }}
   # then connect a WS client to ws://127.0.0.1:8787/ws
 {{- end }}
 
