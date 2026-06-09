@@ -1,0 +1,13 @@
+{{- if .Values.pdb.minAvailable -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "smooai-next.fullname" . }}
+  labels:
+    {{- include "smooai-next.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "smooai-next.selectorLabels" . | nindent 6 }}
+{{- end }}

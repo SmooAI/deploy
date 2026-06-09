@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smooai-next.fullname" . }}
+  labels:
+    {{- include "smooai-next.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "smooai-next.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "smooai-next.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if or .Values.ghcr.externalSecret.enabled .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- if .Values.ghcr.externalSecret.enabled }}
+        - name: {{ .Values.ghcr.externalSecret.name }}
+        {{- end }}
+        {{- with .Values.imagePullSecrets }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: {{ include "smooai-next.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # Graceful shutdown: keep serving while the ALB target group deregisters
+      # this pod's IP, so a rollout drops zero in-flight requests. Must exceed
+      # the preStop sleep below.
+      terminationGracePeriodSeconds: {{ .Values.gracefulShutdown.terminationGracePeriodSeconds | default 30 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # The container's default CMD is `node server.js` (Next standalone) —
+          # we do NOT override it.
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port | default 3000 }}
+              protocol: TCP
+          env:
+            # Next standalone server runtime. HOSTNAME=0.0.0.0 so `node
+            # server.js` binds all interfaces (defaults to localhost, which the
+            # kubelet/ALB can't reach). PORT matches the container port.
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: {{ .Values.service.port | default 3000 | quote }}
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            # The seam to the S3-backed Next cacheHandler. The bucket + IAM role
+            # are provisioned out-of-band; the pod's IRSA role grants S3 access.
+            - name: CACHE_BUCKET_NAME
+              value: {{ .Values.cacheBucketName | quote }}
+            - name: CACHE_BUCKET_REGION
+              value: {{ .Values.cacheBucketRegion | quote }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.config.externalSecret.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.config.externalSecret.name }}
+          {{- end }}
+          # preStop sleep gives the ALB time to deregister the target before the
+          # process exits, completing the zero-downtime rollout handshake.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep {{ .Values.gracefulShutdown.preStopSleepSeconds | default 10 }}"]
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthPath | default "/api/health" }}
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthPath | default "/api/health" }}
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

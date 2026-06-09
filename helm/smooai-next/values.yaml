@@ -1,0 +1,196 @@
+# Default values for the reusable `smooai-next` chart.
+# All overridable per-environment via `helm install -f my-values.yaml`,
+# `--set ...`, or ArgoCD `helm.valuesObject` (see argocd/application.yaml).
+#
+# Consumers typically ship a thin values overlay that sets image.repository/tag,
+# originHost, cacheBucketName, irsaRoleArn, and the config/ghcr secret refs.
+
+# ── Image ──────────────────────────────────────────────────────────────────
+image:
+  # The Next standalone image (built `node:NN-slim` + `.next/standalone`).
+  # Point this at your registry. PRIVATE registries need `ghcr` below.
+  repository: ghcr.io/smooai/next-app
+  # Prefer an immutable tag/digest in prod. ArgoCD Image Updater can manage a
+  # mutable tag (e.g. `main`) and pin its digest via write-back. Empty defaults
+  # to .Chart.AppVersion.
+  tag: ""
+  # `Always` is sensible for a mutable tag (`:main`); `IfNotPresent` for pins.
+  pullPolicy: IfNotPresent
+
+# ── The CloudFront origin host ──────────────────────────────────────────────
+# The host the dedicated ALB Ingress answers on; CloudFront (the SmoothNextEdge
+# SST construct) points at this ALB as its custom origin. The ALB controller
+# auto-discovers the ACM cert whose domain matches this host — no cert ARN here.
+originHost: next-origin.example.com
+
+# ── Next S3 cacheHandler seam ───────────────────────────────────────────────
+# The S3 bucket the Next incremental cache (`cacheHandler`) reads/writes. The
+# app reads CACHE_BUCKET_NAME / CACHE_BUCKET_REGION; AWS creds resolve via the
+# pod's IRSA role (irsaRoleArn). Bucket + IAM role are provisioned out-of-band
+# (the SmoothNextEdge construct / your infra), NOT by this chart.
+cacheBucketName: ""
+cacheBucketRegion: us-east-1
+
+# ── IRSA ────────────────────────────────────────────────────────────────────
+# IAM role ARN annotated onto the ServiceAccount so the pod assumes it
+# (S3 read/write on the cache bucket via the default AWS provider chain).
+irsaRoleArn: ""
+
+# ── Scaling ─────────────────────────────────────────────────────────────────
+# Static replica count used only when hpa.enabled is false.
+replicas: 2
+
+hpa:
+  enabled: true
+  min: 2
+  max: 10
+  cpuTarget: 70
+
+pdb:
+  minAvailable: 1
+
+# ── Health ──────────────────────────────────────────────────────────────────
+# A dependency-free route (e.g. apps/web/app/api/health/route.ts) that reflects
+# only "the Next process is up" — used by both probes AND the ALB healthcheck.
+healthPath: /api/health
+
+service:
+  type: ClusterIP
+  # Container/target port for `node server.js` (Next standalone default 3000).
+  port: 3000
+
+# ── Graceful shutdown (zero-downtime ALB rollouts) ─────────────────────────
+# On pod termination, a preStop `sleep` keeps the process serving while the ALB
+# target group deregisters the IP, so no in-flight request hits a dead pod. The
+# grace period must exceed preStopSleepSeconds + drain time.
+gracefulShutdown:
+  terminationGracePeriodSeconds: 30
+  preStopSleepSeconds: 10
+
+# ── Ingress (dedicated internet-facing ALB = the CloudFront origin) ─────────
+ingress:
+  enabled: true
+  className: alb
+  # Dedicated group so the ALB controller provisions ONE LB for this ingress
+  # (CloudFront points at it specifically). NOT a shared group.
+  groupName: smooai-next
+  scheme: internet-facing
+  # `ip` targets the pods directly (required for the CloudFront->ALB->pod path).
+  targetType: ip
+  # HTTPS:443 only; the ALB controller auto-discovers the ACM cert by host.
+  listenPorts: '[{"HTTPS": 443}]'
+  sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  healthcheck:
+    protocol: HTTP
+    intervalSeconds: "30"
+    timeoutSeconds: "5"
+    healthyThresholdCount: "2"
+    unhealthyThresholdCount: "3"
+    successCodes: "200"
+  # Extra raw annotations merged in (e.g. WAF, access logs). Optional.
+  extraAnnotations: {}
+
+# ── App config (non-secret env) ────────────────────────────────────────────
+# Plain literals injected as container env. The Next standalone server needs
+# HOSTNAME=0.0.0.0 to bind all interfaces (defaults to localhost, unreachable
+# by the kubelet/ALB). Add app-specific non-secret literals here.
+env: []
+
+# ── App config secret (External Secrets) ───────────────────────────────────
+# Secret-tier config synced from your secret store into a k8s Secret, then
+# `envFrom`'d into the container. Maps {envVar -> remote config key}. No
+# smooai-specific keys are hardcoded — provide your own mapping.
+config:
+  externalSecret:
+    enabled: true
+    # The ExternalSecret resource + the Secret it creates.
+    name: next-config-eso
+    # ClusterSecretStore the operator pulls from.
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: smooai-config
+    refreshInterval: 1h
+    # envVar in the container : key in the remote secret store.
+    data:
+      # SMOOAI_CONFIG_CLIENT_ID: smooaiM2mClientId
+      # SMOOAI_CONFIG_CLIENT_SECRET: smooaiM2mClientSecret
+      {}
+
+# ── Private registry pull secret (External Secrets) ─────────────────────────
+# Builds a `kubernetes.io/dockerconfigjson` Secret from a token synced out of
+# your secret store, so pods can pull the PRIVATE image. Referenced by
+# imagePullSecrets on the pod spec.
+ghcr:
+  externalSecret:
+    enabled: true
+    # The ExternalSecret + dockerconfigjson Secret name.
+    name: ghcr-pull-secret
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: smooai-config
+    refreshInterval: 1h
+    # The registry host baked into the dockerconfigjson.
+    registry: ghcr.io
+    # The username paired with the token (auth = b64(username:token)).
+    username: smooai-bot
+    # Key in the remote secret store holding the registry token/PAT.
+    tokenRemoteKey: ghcrPullToken
+
+# ── Pod hardening / scheduling ─────────────────────────────────────────────
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # When true, a ServiceAccount is created (annotated with irsaRoleArn).
+  create: true
+  name: ""
+  # Extra annotations merged with the IRSA role-arn annotation.
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  # Next writes .next/cache at runtime, so the root FS CANNOT be read-only.
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+livenessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 4
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

@@ -1,0 +1,56 @@
+smooai-next has been deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Image:     {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+Replicas:  {{ if .Values.hpa.enabled }}{{ .Values.hpa.min }}–{{ .Values.hpa.max }} (HPA @ {{ .Values.hpa.cpuTarget }}% CPU){{ else }}{{ .Values.replicas }}{{ end }}
+
+This chart is the KUBERNETES WORKLOAD PLANE only. The Next standalone server
+(`node server.js`) runs on port {{ .Values.service.port | default 3000 }} behind a dedicated
+internet-facing ALB. That ALB is the CUSTOM ORIGIN for a CloudFront distribution
+provisioned SEPARATELY by the `SmoothNextEdge` SST construct — CloudFront, the
+edge ACM cert, WAF, and public DNS are NOT managed here.
+
+{{- if .Values.ingress.enabled }}
+
+CloudFront origin (ALB) host:
+  https://{{ .Values.originHost }}    (group: {{ .Values.ingress.groupName }}, {{ .Values.ingress.scheme }})
+  Point the SmoothNextEdge CloudFront origin at this host.
+{{- else }}
+
+Ingress is DISABLED — no ALB/origin was created. CloudFront has nothing to point
+at. Port-forward to test locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooai-next.fullname" . }} {{ .Values.service.port | default 3000 }}:{{ .Values.service.port | default 3000 }}
+{{- end }}
+
+Health: both probes + the ALB healthcheck hit {{ .Values.healthPath | default "/api/health" }}.
+
+Next S3 cacheHandler:
+{{- if .Values.cacheBucketName }}
+  - CACHE_BUCKET_NAME: {{ .Values.cacheBucketName }} ({{ .Values.cacheBucketRegion }})
+{{- else }}
+  - CACHE_BUCKET_NAME: NOT set. The S3-backed cacheHandler has no bucket — set
+    `cacheBucketName` (+ `cacheBucketRegion`) and grant the IRSA role S3 access.
+{{- end }}
+{{- if .Values.irsaRoleArn }}
+  - IRSA role: {{ .Values.irsaRoleArn }} (pod assumes it for S3).
+{{- else }}
+  - IRSA role: NOT set. Pods have no AWS identity — set `irsaRoleArn` so the
+    cacheHandler can read/write the cache bucket.
+{{- end }}
+
+Config / pull secret:
+{{- if .Values.config.externalSecret.enabled }}
+  - App config: ExternalSecret `{{ .Values.config.externalSecret.name }}` from {{ .Values.config.externalSecret.secretStoreRef.name }}, `envFrom`'d into the container.
+{{- else }}
+  - App config: ExternalSecret DISABLED — provide config via `env` or your own Secret.
+{{- end }}
+{{- if .Values.ghcr.externalSecret.enabled }}
+  - Pull secret: ExternalSecret `{{ .Values.ghcr.externalSecret.name }}` ({{ .Values.ghcr.externalSecret.registry }}) wired as imagePullSecrets.
+{{- else }}
+  - Pull secret: DISABLED — set `imagePullSecrets` if the image is private.
+{{- end }}
+
+Graceful shutdown: terminationGracePeriodSeconds={{ .Values.gracefulShutdown.terminationGracePeriodSeconds | default 30 }},
+preStop sleep={{ .Values.gracefulShutdown.preStopSleepSeconds | default 10 }}s — the ALB deregisters the target
+before the process exits (zero-downtime rollout).
