@@ -50,7 +50,11 @@ export function smooaiCacheHandlerPath(): string {
  *
  * @typeParam T - the caller's Next config shape (returned widened with the cache keys).
  */
-export function withSmooaiCache<T extends SmooaiCacheConfig>(nextConfig: T = {} as T): T & SmooaiCacheConfig {
+// `T extends object` (not `SmooaiCacheConfig`): we only ADD the three cache
+// keys, never require them on input — constraining to SmooaiCacheConfig wrongly
+// rejected a full Next `NextConfig` whose `cacheHandler`/`compress` field types
+// don't structurally match this minimal shape. Any config object is accepted.
+export function withSmooaiCache<T extends object>(nextConfig: T = {} as T): T & SmooaiCacheConfig {
     return {
         ...nextConfig,
         cacheHandler: smooaiCacheHandlerPath(),
