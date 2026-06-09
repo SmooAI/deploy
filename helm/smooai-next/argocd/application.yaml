@@ -1,0 +1,103 @@
+# ArgoCD Application for the shared `smooai-next` Helm chart.
+#
+# Templated for ANY consuming repo/path — replace the REPLACE_ME placeholders
+# (or render via your app-of-apps / envsubst). Two common layouts:
+#
+#   A) Chart lives in SmooAI/deploy, values overlaid per consumer:
+#        source.repoURL: https://github.com/SmooAI/deploy
+#        source.path:    helm/smooai-next
+#        source.helm.valuesObject: <your per-env overrides>
+#
+#   B) Consumer vendors a thin overlay that points at this chart as a
+#      dependency; then repoURL/path target the CONSUMER repo.
+#
+# Mirrors the smooai api-prime / ArgoCD pattern: automated sync (prune +
+# selfHeal), CreateNamespace, a sync-wave annotation, and a retry/backoff.
+# Apply into the ArgoCD namespace:
+#   kubectl apply -n argocd -f argocd/application.yaml
+#
+# Image-tag wiring: pin via the `image.tag` value below, or let ArgoCD Image
+# Updater manage it (add the standard `argocd-image-updater.argoproj.io/*`
+# annotations once a registry tag policy is chosen — matching smooai's web /
+# api-prime setup). Secrets come from External Secrets (config.externalSecret /
+# ghcr.externalSecret) rather than inline here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smooai-next
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # REPLACE_ME: the repo holding the chart (or your overlay). Defaults below
+    # target the shared chart in SmooAI/deploy.
+    repoURL: https://github.com/SmooAI/deploy
+    targetRevision: main
+    path: helm/smooai-next
+    helm:
+      releaseName: smooai-next
+      # Per-environment overrides. Secrets come from External Secrets, never
+      # inline here.
+      valuesObject:
+        image:
+          repository: ghcr.io/smooai/next-app   # REPLACE_ME per consumer
+          tag: ""          # pin an immutable tag/digest in prod
+          pullPolicy: IfNotPresent
+        originHost: next-origin.smoo.ai          # REPLACE_ME — the CloudFront origin host
+        cacheBucketName: smooai-next-cache       # REPLACE_ME — the Next S3 cacheHandler bucket
+        cacheBucketRegion: us-east-1
+        irsaRoleArn: arn:aws:iam::000000000000:role/smooai-next-irsa  # REPLACE_ME
+        hpa:
+          enabled: true
+          min: 2
+          max: 10
+          cpuTarget: 70
+        pdb:
+          minAvailable: 1
+        ingress:
+          enabled: true
+          className: alb
+          groupName: smooai-next
+          scheme: internet-facing
+          targetType: ip
+        config:
+          externalSecret:
+            enabled: true
+            name: next-config-eso
+            secretStoreRef:
+              kind: ClusterSecretStore
+              name: smooai-config
+            data:
+              # SMOOAI_CONFIG_CLIENT_ID: smooaiM2mClientId       # REPLACE_ME
+              # SMOOAI_CONFIG_CLIENT_SECRET: smooaiM2mClientSecret
+              {}
+        ghcr:
+          externalSecret:
+            enabled: true
+            name: ghcr-pull-secret
+            secretStoreRef:
+              kind: ClusterSecretStore
+              name: smooai-config
+            registry: ghcr.io
+            username: smooai-bot
+            tokenRemoteKey: ghcrPullToken
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smooai-next    # REPLACE_ME per consumer
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

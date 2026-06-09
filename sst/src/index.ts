@@ -31,3 +31,10 @@ export {
     SMOOTH_AGENT_TABLE_FIELDS,
     type DynamoSingleTableArgs,
 } from './components/dynamo-single-table';
+
+export {
+    SmooaiNextEdge,
+    type SmooaiNextEdgeArgs,
+    type SmooaiNextEdgeOutputs,
+    type DnsAdapter,
+} from './components/smooai-next-edge';

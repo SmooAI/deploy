@@ -1,0 +1,44 @@
+apiVersion: v2
+name: smooai-next
+description: |
+  Reusable Helm chart for the Kubernetes workload plane of a containerized
+  Next.js app — the Next standalone server (`node server.js`) running at scale
+  on EKS, fronted by a dedicated internet-facing ALB that serves as the custom
+  origin for a CloudFront distribution provisioned separately (the
+  `SmoothNextEdge` SST construct in `@smooai/deploy`).
+
+  This chart owns the in-cluster half only: Deployment (with graceful shutdown
+  for zero-downtime ALB rollouts), Service, HPA, PodDisruptionBudget, an
+  IRSA ServiceAccount (for the S3-backed Next `cacheHandler`), a dedicated ALB
+  Ingress (the CloudFront origin), and the External Secrets that hydrate the
+  app config + the private-registry pull secret. The CloudFront distribution,
+  WAF, and DNS live on the edge/SST side — NOT here.
+
+  Extracted into SmooAI/deploy so any consumer can `helm install` it directly,
+  use it as a `file://`/OCI dependency, or maintain a thin values overlay.
+type: application
+# Chart version — bump on chart changes.
+version: 0.1.0
+# Tracks the consuming app image version (override via image.tag).
+appVersion: "0.1.0"
+home: https://github.com/SmooAI/deploy
+sources:
+  - https://github.com/SmooAI/deploy
+keywords:
+  - nextjs
+  - next
+  - eks
+  - cloudfront
+  - alb
+  - smooai
+maintainers:
+  - name: SmooAI
+    url: https://github.com/SmooAI
+# NOTE: This chart fronts the app with a DEDICATED internet-facing ALB Ingress
+# whose host (`originHost`) is the CloudFront custom origin. The CloudFront
+# distribution itself, the ACM cert at the edge, the WAF, and the public DNS
+# record are provisioned SEPARATELY by the `SmoothNextEdge` SST construct — this
+# chart does NOT manage them. The seam is: CloudFront -> (HTTPS, origin host) ->
+# this ALB -> pods. The app's S3-backed incremental cache (`cacheHandler`) talks
+# to the bucket named by `cacheBucketName` using the pod's IRSA role
+# (`irsaRoleArn`); the bucket + IAM role are likewise provisioned out-of-band.

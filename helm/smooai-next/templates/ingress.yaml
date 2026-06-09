@@ -1,0 +1,47 @@
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "smooai-next.fullname" . -}}
+{{- $svcPort := .Values.service.port | default 3000 -}}
+{{- $hc := .Values.ingress.healthcheck -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "smooai-next.labels" . | nindent 4 }}
+  annotations:
+    # Dedicated internet-facing ALB: this LB is the CloudFront custom origin.
+    # The group.name keeps it a single LB owned by THIS ingress (not shared).
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.scheme | quote }}
+    alb.ingress.kubernetes.io/target-type: {{ .Values.ingress.targetType | quote }}
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName | quote }}
+    alb.ingress.kubernetes.io/listen-ports: {{ .Values.ingress.listenPorts | quote }}
+    alb.ingress.kubernetes.io/ssl-policy: {{ .Values.ingress.sslPolicy | quote }}
+    # No certificate-arn: the ALB controller auto-discovers the ACM cert whose
+    # domain matches the ingress host ({{ .Values.originHost }}).
+    alb.ingress.kubernetes.io/healthcheck-protocol: {{ $hc.protocol | quote }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{ .Values.healthPath | default "/api/health" | quote }}
+    alb.ingress.kubernetes.io/healthcheck-port: {{ $svcPort | quote }}
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: {{ $hc.intervalSeconds | quote }}
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: {{ $hc.timeoutSeconds | quote }}
+    alb.ingress.kubernetes.io/healthy-threshold-count: {{ $hc.healthyThresholdCount | quote }}
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: {{ $hc.unhealthyThresholdCount | quote }}
+    alb.ingress.kubernetes.io/success-codes: {{ $hc.successCodes | quote }}
+    {{- with .Values.ingress.extraAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.originHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $svcPort }}
+{{- end }}

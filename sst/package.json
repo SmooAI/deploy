@@ -10,7 +10,14 @@
         ".": "./src/index.ts",
         "./components/smooth-agent-api": "./src/components/smooth-agent-api.ts",
         "./components/websocket-lambda-api": "./src/components/websocket-lambda-api.ts",
-        "./components/dynamo-single-table": "./src/components/dynamo-single-table.ts"
+        "./components/dynamo-single-table": "./src/components/dynamo-single-table.ts",
+        "./components/smooai-next-edge": "./src/components/smooai-next-edge.ts",
+        "./next": {
+            "types": "./src/next/index.ts",
+            "import": "./src/next/index.ts",
+            "default": "./src/next/index.ts"
+        },
+        "./next/cache-handler.cjs": "./src/next/cache-handler.cjs"
     },
     "files": [
         "src"
@@ -19,7 +26,13 @@
         "typecheck": "tsc --noEmit"
     },
     "peerDependencies": {
+        "@aws-sdk/client-s3": ">=3",
         "sst": ">=4.13.0 <5"
+    },
+    "peerDependenciesMeta": {
+        "@aws-sdk/client-s3": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@types/node": "22.10.5",
