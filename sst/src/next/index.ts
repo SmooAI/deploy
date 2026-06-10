@@ -22,6 +22,13 @@ export interface SmooaiCacheConfig {
     cacheMaxMemorySize?: number;
     /** Whether Next gzip-compresses responses. Disabled so the CDN/ALB compresses instead. */
     compress?: boolean;
+    /**
+     * Packages Next should NOT bundle into the server build (run from
+     * `node_modules` + traced into the standalone output instead). We add
+     * `@aws-sdk/client-s3` here so webpack never tries to bundle the SDK's
+     * `node:`-scheme internals when it compiles the cacheHandler.
+     */
+    serverExternalPackages?: string[];
     [key: string]: unknown;
 }
 
@@ -55,11 +62,17 @@ export function smooaiCacheHandlerPath(): string {
 // rejected a full Next `NextConfig` whose `cacheHandler`/`compress` field types
 // don't structurally match this minimal shape. Any config object is accepted.
 export function withSmooaiCache<T extends object>(nextConfig: T = {} as T): T & SmooaiCacheConfig {
+    // Merge (don't clobber) any serverExternalPackages the caller already set, and
+    // ensure @aws-sdk/client-s3 is externalized so webpack doesn't bundle the SDK's
+    // node:-scheme internals when compiling the cacheHandler. De-duped.
+    const existing = (nextConfig as { serverExternalPackages?: string[] }).serverExternalPackages;
+    const serverExternalPackages = Array.from(new Set([...(Array.isArray(existing) ? existing : []), '@aws-sdk/client-s3']));
     return {
         ...nextConfig,
         cacheHandler: smooaiCacheHandlerPath(),
         cacheMaxMemorySize: 0,
         compress: false,
+        serverExternalPackages,
     };
 }
 

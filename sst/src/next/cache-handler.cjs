@@ -49,9 +49,30 @@
  * from the consumer's Next app (declared as a peer dependency).
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+// Bare specifiers (NOT `node:fs` / `node:path`): Next compiles a custom
+// `cacheHandler` through webpack, and webpack 5 treats the `node:` URI scheme as
+// unhandled (`UnhandledSchemeError`) unless a plugin is added, whereas bare
+// builtins are recognized + externalized for the server target automatically.
+const fs = require('fs');
+const path = require('path');
+
+// The only runtime dependency, declared as an OPTIONAL peer. Loaded LAZILY and
+// guarded so the module never throws at load time: a consumer that wires
+// `withSmooaiCache` but never sets `CACHE_BUCKET_NAME` — or never installs the
+// SDK — degrades to a no-op cache instead of crashing the server. `withSmooaiCache`
+// adds `@aws-sdk/client-s3` to `serverExternalPackages`, so webpack externalizes
+// it (no bundling of the SDK's own `node:`-scheme internals) and Next traces it
+// into the standalone output for runtime resolution.
+let _sdk; // undefined = not yet tried, null = unavailable, object = loaded
+function loadSdk() {
+    if (_sdk !== undefined) return _sdk;
+    try {
+        _sdk = require('@aws-sdk/client-s3');
+    } catch {
+        _sdk = null;
+    }
+    return _sdk;
+}
 
 // ── observability hook ───────────────────────────────────────────────────────
 // Resolve a consumer-supplied callback at call time (it may be set after this
@@ -97,8 +118,15 @@ function store() {
         resolved = null; // degrade to no-op; site serves uncached
         return resolved;
     }
+    const sdk = loadSdk();
+    if (!sdk) {
+        resolved = null; // SDK not installed → degrade to no-op
+        return resolved;
+    }
     resolved = {
-        s3: new S3Client({ region: process.env.CACHE_BUCKET_REGION || process.env.AWS_REGION || 'us-east-1' }),
+        s3: new sdk.S3Client({ region: process.env.CACHE_BUCKET_REGION || process.env.AWS_REGION || 'us-east-1' }),
+        GetObjectCommand: sdk.GetObjectCommand,
+        PutObjectCommand: sdk.PutObjectCommand,
         bucket,
         prefix: process.env.CACHE_BUCKET_KEY_PREFIX || 'next-cache',
     };
@@ -139,7 +167,7 @@ module.exports = class S3CacheHandler {
         if (!s) return null;
         const fetchKind = isFetch(ctx);
         try {
-            const res = await s.s3.send(new GetObjectCommand({ Bucket: s.bucket, Key: s3Key(s.prefix, key, fetchKind) }));
+            const res = await s.s3.send(new s.GetObjectCommand({ Bucket: s.bucket, Key: s3Key(s.prefix, key, fetchKind) }));
             const entry = deserialize(await streamToString(res.Body));
             emit({ type: 'hit', op: 'get', key, fetch: fetchKind });
             return { lastModified: entry.lastModified, value: entry.value };
@@ -162,7 +190,7 @@ module.exports = class S3CacheHandler {
             const tags = (ctx && (ctx.tags || ctx.softTags)) || [];
             const body = serialize({ value, lastModified: Date.now(), tags, revalidate: ctx?.revalidate });
             await s.s3.send(
-                new PutObjectCommand({
+                new s.PutObjectCommand({
                     Bucket: s.bucket,
                     Key: s3Key(s.prefix, key, fetchKind),
                     Body: body,
