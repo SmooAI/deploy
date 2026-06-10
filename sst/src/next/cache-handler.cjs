@@ -94,20 +94,35 @@ function emit(event) {
     }
 }
 
-// ── buildId (read once) ──────────────────────────────────────────────────────
-function readBuildId() {
-    const candidates = [path.join(process.cwd(), '.next', 'BUILD_ID'), path.join(process.cwd(), '.next', 'standalone', '.next', 'BUILD_ID')];
+// ── buildId (read once, LAZILY) ──────────────────────────────────────────────
+// CRITICAL: nothing at module-load time may call `process.cwd()` (or any other
+// Node-only API). Next bundles a configured `cacheHandler` into BOTH the Node
+// server AND the Edge runtime (middleware) — and `process.cwd()` THROWS in the
+// Edge Runtime ("A Node.js API is used (process.cwd) which is not supported in
+// the Edge Runtime"). A module-load call there crashes the whole middleware →
+// site-wide 500s on every dynamic route, even though this handler's methods are
+// only ever invoked from the Node runtime. So `buildId` is resolved lazily on
+// first get/set (Node-only paths) and `process.cwd()` is itself guarded.
+let _buildId; // undefined = not resolved yet
+function getBuildId() {
+    if (_buildId !== undefined) return _buildId;
+    let cwd = '';
+    try {
+        cwd = process.cwd();
+    } catch {
+        /* Edge Runtime: process.cwd is unsupported — fall through to env/default */
+    }
+    const candidates = cwd ? [path.join(cwd, '.next', 'BUILD_ID'), path.join(cwd, '.next', 'standalone', '.next', 'BUILD_ID')] : [];
     for (const p of candidates) {
         try {
             const id = fs.readFileSync(p, 'utf8').trim();
-            if (id) return id;
+            if (id) return (_buildId = id);
         } catch {
             /* try next */
         }
     }
-    return process.env.NEXT_BUILD_ID || 'nobuild';
+    return (_buildId = process.env.NEXT_BUILD_ID || 'nobuild');
 }
-const BUILD_ID = readBuildId();
 
 // ── lazy S3 store (bucket name arrives via env) ──────────────────────────────
 let resolved; // undefined = unresolved, null = no bucket (no-op), object = ready
@@ -135,7 +150,7 @@ function store() {
 
 function s3Key(prefix, key, isFetch) {
     const safe = String(key).replace(/^\/+/, ''); // no leading slash → no `//` in the key
-    return `${prefix}/${BUILD_ID}/${safe}.${isFetch ? 'fetch' : 'cache'}`;
+    return `${prefix}/${getBuildId()}/${safe}.${isFetch ? 'fetch' : 'cache'}`;
 }
 
 function isFetch(ctx) {
