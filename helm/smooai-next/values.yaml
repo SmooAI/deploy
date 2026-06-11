@@ -57,6 +57,10 @@ revisionHistoryLimit: 10
 
 pdb:
   minAvailable: 1
+  # Eviction policy for not-yet-Ready pods. AlwaysAllow avoids a stuck pod
+  # blocking node drains / rollouts at minAvailable (k8s default is
+  # IfHealthyBudget). Set to "IfHealthyBudget" to opt back into the default.
+  unhealthyPodEvictionPolicy: AlwaysAllow
 
 # ── Health ──────────────────────────────────────────────────────────────────
 # A dependency-free route (e.g. apps/web/app/api/health/route.ts) that reflects

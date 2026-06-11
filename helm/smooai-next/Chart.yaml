@@ -21,7 +21,9 @@ type: application
 # 0.2.0: expose hpa.behavior (v2 scaleUp/scaleDown) + revisionHistoryLimit, so a
 #        consumer's cdk8s/ArgoCD manifest can match a hand-rolled Deployment/HPA
 #        (SMOODEV-1790 — dogfooding the chart for smooai apps/web).
-version: 0.2.0
+# 0.2.1: PDB sets unhealthyPodEvictionPolicy (default AlwaysAllow) — kube-linter
+#        flags its absence; matches the prior hand-rolled PDB.
+version: 0.2.1
 # Tracks the consuming app image version (override via image.tag).
 appVersion: "0.1.0"
 home: https://github.com/SmooAI/deploy

@@ -7,6 +7,10 @@ metadata:
     {{- include "smooai-next.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.pdb.minAvailable }}
+  # AlwaysAllow lets unhealthy (not-yet-Ready) pods be evicted even at
+  # minAvailable, so a node drain / rollout isn't blocked by a stuck pod.
+  # (Kubernetes defaults to IfHealthyBudget, which kube-linter flags.)
+  unhealthyPodEvictionPolicy: {{ .Values.pdb.unhealthyPodEvictionPolicy | default "AlwaysAllow" }}
   selector:
     matchLabels:
       {{- include "smooai-next.selectorLabels" . | nindent 6 }}
