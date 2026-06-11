@@ -46,6 +46,15 @@
 /** us-east-1 — CloudFront viewer certs (ACM) must live here. */
 const CLOUDFRONT_ACM_REGION = 'us-east-1';
 
+/**
+ * AWS-managed origin-request policy `Managed-AllViewerExceptHostHeader` — forwards
+ * all viewer headers, cookies, and query strings to the origin EXCEPT `Host`, so
+ * CloudFront sends the origin's own host. The canonical policy for an ALB origin
+ * that routes by a fixed host (the default for {@link SmooaiNextEdge}). This id is
+ * stable across all AWS accounts/regions.
+ */
+const MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER = 'b689b0a8-53d0-40ab-baf2-68738e2966ac';
+
 /** One year, in seconds — the immutable-asset cache ceiling. */
 const ONE_YEAR_SECONDS = 31_536_000;
 
@@ -171,6 +180,25 @@ export interface SmooaiNextEdgeArgs {
      * to your EKS cluster for the best collapse ratio.
      */
     originShieldRegion?: string;
+    /**
+     * Whether to forward the **viewer** `Host` header to the origin on the
+     * dynamic (default) behavior.
+     *
+     * Defaults to `false` — CloudFront sends the **origin's** host
+     * ({@link originHost}) as `Host`. This is the correct default for an EKS ALB
+     * origin: the ALB Ingress routes by a fixed origin host (e.g. an Ingress
+     * rule `host: web-origin.example.com`), so forwarding the viewer host
+     * (`app.example.com`) would miss every rule and the ALB returns 404. With
+     * the default, the ALB sees its expected host and routes to the pods; the
+     * app sees the origin host (use relative URLs / `x-forwarded-*` for the
+     * public host). Internally this uses the AWS-managed
+     * `Managed-AllViewerExceptHostHeader` origin-request policy (still forwards
+     * all cookies, auth headers, and query strings — just not `Host`).
+     *
+     * Set `true` only if your origin is host-agnostic (catch-all) or your app
+     * genuinely needs the viewer `Host` (and your origin won't 404 on it).
+     */
+    forwardViewerHost?: boolean;
     /** CloudFront price class. Defaults to `'PriceClass_100'` (NA + EU). */
     priceClass?: 'PriceClass_All' | 'PriceClass_200' | 'PriceClass_100';
     /** Pass-through `$transform`/component options for the distribution. */
@@ -240,6 +268,7 @@ export class SmooaiNextEdge {
             originShield = true,
             originShieldRegion = 'us-east-1',
             priceClass = 'PriceClass_100',
+            forwardViewerHost = false,
         } = args;
 
         const allHosts = [domain, ...aliases];
@@ -437,15 +466,27 @@ export class SmooaiNextEdge {
             },
         });
 
-        // Origin-request policy for dynamic behaviors: forward everything to the
-        // origin (auth headers, cookies, host, qs) so SSR sees the full request
-        // and authenticated pages render correctly / bypass cache.
-        const allViewerPolicy = new aws.cloudfront.OriginRequestPolicy(`${name}AllViewerPolicy`, {
-            name: $interpolate`${$app.name}-${$app.stage}-${name}-all-viewer`,
-            cookiesConfig: { cookieBehavior: 'all' },
-            headersConfig: { headerBehavior: 'allViewerAndWhitelistCloudFront', headers: { items: ['CloudFront-Viewer-Address'] } },
-            queryStringsConfig: { queryStringBehavior: 'all' },
-        });
+        // Origin-request policy for the dynamic (default) behavior.
+        //
+        // Default (`forwardViewerHost: false`): the AWS-managed
+        // `Managed-AllViewerExceptHostHeader` — forwards all cookies, auth
+        // headers, and query strings, but NOT `Host`, so CloudFront sends the
+        // ORIGIN's host. Required for an EKS ALB origin whose Ingress routes by a
+        // fixed host: forwarding the viewer host (e.g. `app.example.com`) misses
+        // every Ingress rule and the ALB returns 404. SSR still sees the full
+        // request (cookies/auth/qs) so authenticated pages render / bypass cache.
+        //
+        // Opt-in (`forwardViewerHost: true`): a custom policy that forwards the
+        // viewer host too — only for host-agnostic origins or apps that need it.
+        const allViewerPolicy = forwardViewerHost
+            ? new aws.cloudfront.OriginRequestPolicy(`${name}AllViewerPolicy`, {
+                  name: $interpolate`${$app.name}-${$app.stage}-${name}-all-viewer`,
+                  cookiesConfig: { cookieBehavior: 'all' },
+                  headersConfig: { headerBehavior: 'allViewerAndWhitelistCloudFront', headers: { items: ['CloudFront-Viewer-Address'] } },
+                  queryStringsConfig: { queryStringBehavior: 'all' },
+              })
+            : undefined;
+        const defaultOriginRequestPolicyId = allViewerPolicy ? allViewerPolicy.id : MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER;
 
         const originId = `${name}-eks-origin`;
 
@@ -484,7 +525,7 @@ export class SmooaiNextEdge {
                 cachedMethods: ['GET', 'HEAD'],
                 compress: true,
                 cachePolicyId: htmlPolicy.id,
-                originRequestPolicyId: allViewerPolicy.id,
+                originRequestPolicyId: defaultOriginRequestPolicyId,
             },
             orderedCacheBehaviors: [
                 // Immutable build assets — long-cache, forward nothing.
