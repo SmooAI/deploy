@@ -57,11 +57,36 @@ const ONE_YEAR_SECONDS = 31_536_000;
  * coupling to an un-exposed platform type.
  */
 export interface DnsAdapter {
+    /**
+     * DNS provider id (`'cloudflare'` | `'aws'` | `'vercel'`). Used to decide
+     * whether ACM needs CAA records: a non-Route53 zone must publish a
+     * `CAA … issue "amazonaws.com"` record or DNS validation can be refused.
+     */
+    provider?: string;
     createAlias(
         namePrefix: string,
         record: { name: $util.Input<string>; aliasName: $util.Input<string>; aliasZone: $util.Input<string> },
         opts: Record<string, never>,
     ): unknown;
+    /**
+     * Create a generic DNS record. Used here to publish the ACM DNS-validation
+     * CNAMEs so the us-east-1 viewer cert issues automatically. SST's
+     * `sst.cloudflare.dns()` / `sst.aws.dns()` adapters provide this. When
+     * absent, the construct leaves cert validation to the consumer (manual) and
+     * references the raw (PENDING) cert ARN — only safe if you validate it
+     * out-of-band before the distribution is created.
+     */
+    createRecord?(
+        namePrefix: string,
+        record: { type: $util.Input<string>; name: $util.Input<string>; value: $util.Input<string> },
+        opts: $util.ComponentResourceOptions,
+    ): $util.Output<$util.Resource>;
+    /**
+     * Create the CAA records authorizing ACM (`amazonaws.com`) to issue for the
+     * domain — needed when the zone isn't on Route 53. Returns the created
+     * records so the validation records can depend on them.
+     */
+    createCaa?(namePrefix: string, recordName: $util.Input<string>, opts: $util.ComponentResourceOptions): $util.Resource[] | $util.Output<$util.Resource>[] | undefined;
 }
 
 /** Tunables for {@link SmooaiNextEdge}. */
@@ -323,6 +348,45 @@ export class SmooaiNextEdge {
             { provider: usEast1 },
         );
 
+        // Auto-issue the viewer cert when the DNS adapter can create records:
+        // publish the ACM DNS-validation CNAMEs (+ a CAA for non-Route53 zones)
+        // and gate on an `aws.acm.CertificateValidation` so the cert is ISSUED
+        // before CloudFront tries to attach it. Without this gate the deploy
+        // fails — CloudFront rejects a PENDING_VALIDATION cert. The validation
+        // CNAMEs must NOT be proxied; SST's cloudflare adapter only proxies
+        // alias records, so `createRecord` here stays grey-cloud as ACM needs.
+        // No `createRecord` on the adapter (or no adapter) → manual validation:
+        // reference the raw cert ARN (the consumer must validate out-of-band).
+        let viewerCertificateArn: $util.Output<string> = certificate.arn;
+        if (args.dns?.createRecord) {
+            const dns = args.dns;
+            const validationRecords = $util.all([certificate.domainValidationOptions]).apply(([options]) => {
+                // De-dup: a domain + its SANs frequently share one CNAME.
+                const seen: string[] = [];
+                const unique = options.filter((option) => {
+                    const key = option.resourceRecordType + option.resourceRecordName;
+                    if (seen.includes(key)) return false;
+                    seen.push(key);
+                    return true;
+                });
+                const caaRecords = dns.provider !== 'aws' && dns.createCaa ? dns.createCaa(`${name}Cert`, domain, {}) : undefined;
+                return unique.map((option) =>
+                    dns.createRecord!(
+                        `${name}Cert`,
+                        { type: option.resourceRecordType, name: option.resourceRecordName, value: option.resourceRecordValue },
+                        { dependsOn: caaRecords ? [...caaRecords] : [] },
+                    ),
+                );
+            });
+
+            const certificateValidation = new aws.acm.CertificateValidation(
+                `${name}CertValidation`,
+                { certificateArn: certificate.arn },
+                { provider: usEast1, dependsOn: validationRecords },
+            );
+            viewerCertificateArn = certificateValidation.certificateArn;
+        }
+
         // ── Cache + origin-request policies ────────────────────────────────
         // Immutable assets: cache hard, forward nothing (no cookies/headers/qs).
         const immutablePolicy = new aws.cloudfront.CachePolicy(`${name}ImmutablePolicy`, {
@@ -448,7 +512,7 @@ export class SmooaiNextEdge {
                 geoRestriction: { restrictionType: 'none' },
             },
             viewerCertificate: {
-                acmCertificateArn: certificate.arn,
+                acmCertificateArn: viewerCertificateArn,
                 sslSupportMethod: 'sni-only',
                 minimumProtocolVersion: 'TLSv1.2_2021',
             },
