@@ -1,0 +1,84 @@
+name: PR Checks
+
+# SMOODEV-1792: gate changes to @smooai/deploy — the SST construct library
+# (sst/src) AND the reusable Helm chart (helm/smooai-next). The release workflow
+# deliberately skips typechecking the constructs (they need `sst install` for the
+# ambient `sst`/`$util`/`aws` globals); this runs that gate on every PR + push.
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+# A newer push to the same PR/branch cancels the older run.
+concurrency:
+    group: pr-checks-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    # ── SST construct library: typecheck src/ against the SST platform types ──
+    # `sst install` generates `.sst/platform/config.d.ts` (the ambient `sst` /
+    # `$util` / `aws` declarations the constructs reference). It only downloads
+    # the Pulumi provider type packages — NO AWS credentials / no state access.
+    constructs:
+        name: Constructs typecheck
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: sst
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+
+            # SST 4.x requires Node 22 (silently crashes on 24).
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            # --no-frozen-lockfile: the committed lockfile carries a
+            # settings.injectWorkspacePackages value that a frozen install rejects
+            # under the runner's pnpm config (same reason release.yml uses it).
+            - name: Install
+              run: pnpm install --no-frozen-lockfile
+
+            - name: sst install (generate .sst/platform ambient types)
+              run: pnpm sst install
+
+            - name: Typecheck (tsc --noEmit)
+              run: pnpm typecheck
+
+    # ── Helm chart: lint + render smoke + schema validate ────────────────────
+    helm-chart:
+        name: Helm chart
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # helm is pre-installed on ubuntu-latest runners.
+            - name: helm lint
+              run: helm lint helm/smooai-next/
+
+            - name: Render smoke (defaults + a representative consumer overlay)
+              run: |
+                  set -euo pipefail
+                  helm template smooai-next helm/smooai-next/ > /tmp/render-default.yaml
+                  helm template web helm/smooai-next/ \
+                      --namespace smooai-web \
+                      --set fullnameOverride=web --set nameOverride=web \
+                      --set image.repository=ghcr.io/smooai/web --set image.tag=main \
+                      --set irsaRoleArn=arn:aws:iam::000000000000:role/web-irsa \
+                      --set 'hpa.behavior.scaleDown.stabilizationWindowSeconds=600' \
+                      --set revisionHistoryLimit=5 \
+                      > /tmp/render-web.yaml
+                  echo "rendered defaults=$(grep -c '^kind:' /tmp/render-default.yaml) overlay=$(grep -c '^kind:' /tmp/render-web.yaml) resources"
+
+            - name: Schema-validate rendered manifests (kubeconform)
+              run: |
+                  set -euo pipefail
+                  curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+                  # ExternalSecret is a CRD (no upstream schema); validate the rest strictly.
+                  ./kubeconform -strict -summary -ignore-missing-schemas \
+                      -skip ExternalSecret \
+                      /tmp/render-default.yaml /tmp/render-web.yaml
