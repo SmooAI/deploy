@@ -37,8 +37,11 @@ jobs:
               with:
                   node-version: 22
 
+            # --no-frozen-lockfile: the committed lockfile carries a
+            # settings.injectWorkspacePackages value that a frozen install rejects
+            # under the runner's pnpm config (same reason release.yml uses it).
             - name: Install
-              run: pnpm install --frozen-lockfile
+              run: pnpm install --no-frozen-lockfile
 
             - name: sst install (generate .sst/platform ambient types)
               run: pnpm sst install
