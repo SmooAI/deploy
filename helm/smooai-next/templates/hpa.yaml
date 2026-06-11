@@ -19,4 +19,9 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.hpa.cpuTarget }}
+  {{- with .Values.hpa.behavior }}
+  # Optional v2 scaling behavior (scaleUp/scaleDown stabilization + policies).
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

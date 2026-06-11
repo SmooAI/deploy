@@ -41,3 +41,25 @@ jobs:
               run: pnpm publish --access public --no-git-checks
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.SMOOAI_NPM_TOKEN }}
+
+    # Publishes the reusable `smooai-next` Helm chart to GHCR as an OCI artifact
+    # (oci://ghcr.io/smooai/charts/smooai-next:<version>). Consumers reference it
+    # from cdk8s (`cdk8s.Helm`) / ArgoCD. helm is pre-installed on ubuntu runners.
+    publish-helm:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Login to GHCR (Helm OCI registry)
+              run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            - name: Package + push smooai-next chart
+              run: |
+                  set -euo pipefail
+                  helm package helm/smooai-next
+                  CHART_TGZ=$(ls smooai-next-*.tgz)
+                  echo "Pushing $CHART_TGZ → oci://ghcr.io/smooai/charts"
+                  helm push "$CHART_TGZ" oci://ghcr.io/smooai/charts

@@ -45,6 +45,15 @@ hpa:
   min: 2
   max: 10
   cpuTarget: 70
+  # Optional autoscaling/v2 scaling behavior (scaleUp/scaleDown stabilization
+  # windows + policies). Empty = the autoscaler's built-in defaults. Example:
+  #   behavior:
+  #     scaleUp:   { stabilizationWindowSeconds: 60,  policies: [{ type: Percent, value: 100, periodSeconds: 60 }] }
+  #     scaleDown: { stabilizationWindowSeconds: 600, policies: [{ type: Pods,    value: 1,   periodSeconds: 300 }] }
+  behavior: {}
+
+# Deployment revisions retained for rollback. Kubernetes default is 10.
+revisionHistoryLimit: 10
 
 pdb:
   minAvailable: 1

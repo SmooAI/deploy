@@ -8,6 +8,7 @@ spec:
   {{- if not .Values.hpa.enabled }}
   replicas: {{ .Values.replicas }}
   {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 10 }}
   selector:
     matchLabels:
       {{- include "smooai-next.selectorLabels" . | nindent 6 }}

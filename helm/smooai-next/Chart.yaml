@@ -18,7 +18,10 @@ description: |
   use it as a `file://`/OCI dependency, or maintain a thin values overlay.
 type: application
 # Chart version — bump on chart changes.
-version: 0.1.0
+# 0.2.0: expose hpa.behavior (v2 scaleUp/scaleDown) + revisionHistoryLimit, so a
+#        consumer's cdk8s/ArgoCD manifest can match a hand-rolled Deployment/HPA
+#        (SMOODEV-1790 — dogfooding the chart for smooai apps/web).
+version: 0.2.0
 # Tracks the consuming app image version (override via image.tag).
 appVersion: "0.1.0"
 home: https://github.com/SmooAI/deploy
