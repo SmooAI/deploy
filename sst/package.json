@@ -1,6 +1,6 @@
 {
     "name": "@smooai/deploy",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "description": "Shared SmooAI deploy primitives — reusable SST v4 constructs (API Gateway WebSocket + Rust Lambda + DynamoDB single-table + S3 blob bucket + S3 Vectors placeholder). Consumed by smooth-operator and dogfooded by smooai.",
     "license": "MIT",
     "type": "module",

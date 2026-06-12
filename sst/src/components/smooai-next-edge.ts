@@ -452,6 +452,16 @@ export class SmooaiNextEdge {
         // year-long s-maxage at the edge. Cache key includes all cookies/qs so
         // authenticated pages get their own (effectively uncached, per-session)
         // entries rather than serving one user's HTML to another.
+        //
+        // CRITICAL for Next.js App Router: the cache key MUST include the RSC
+        // request headers. Next serves the SAME URL as both the HTML document
+        // (no `RSC` header) and the React Server Component / Flight payload
+        // (`RSC: 1`, prefetch, router-state-tree, next-url). With these NOT in
+        // the cache key the two responses collide — a cached RSC/Flight payload
+        // gets served for a document request, so the page renders as raw text
+        // (`1:"$Sreact.fragment"…`) and the app never hydrates (forms dead,
+        // sign-in "does nothing"). Whitelisting them gives the document and each
+        // RSC variant distinct cache entries. (Matches OpenNext / sst.aws.Nextjs.)
         const htmlPolicy = new aws.cloudfront.CachePolicy(`${name}HtmlPolicy`, {
             name: $interpolate`${$app.name}-${$app.stage}-${name}-html`,
             defaultTtl: htmlDefaultTtl,
@@ -459,7 +469,7 @@ export class SmooaiNextEdge {
             minTtl: 0,
             parametersInCacheKeyAndForwardedToOrigin: {
                 cookiesConfig: { cookieBehavior: 'all' },
-                headersConfig: { headerBehavior: 'none' },
+                headersConfig: { headerBehavior: 'whitelist', headers: { items: ['RSC', 'Next-Router-Prefetch', 'Next-Router-State-Tree', 'Next-Url'] } },
                 queryStringsConfig: { queryStringBehavior: 'all' },
                 enableAcceptEncodingGzip: true,
                 enableAcceptEncodingBrotli: true,
