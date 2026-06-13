@@ -1,26 +1,21 @@
 <p align="center">
-  <a href="https://smoo.ai"><img src="https://smoo.ai/images/logo/logo.svg" alt="Smoo AI" width="220" /></a>
-</p>
-
-<h1 align="center">@smooai/deploy</h1>
-
-<p align="center">
-  <strong>Deploy a smooth-operator agent two ways from one package — SST v4 constructs for AWS serverless, and a Helm chart + ArgoCD for Kubernetes.</strong>
+  <a href="https://smoo.ai"><img src=".github/banner.png" alt="@smooai/deploy — One agent. AWS serverless or Kubernetes." width="100%" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Smoo_AI-platform-00A6A6?style=flat-square" alt="Smoo AI">
-  <img src="https://img.shields.io/badge/license-MIT-F49F0A?style=flat-square" alt="license">
+  <a href="https://smoo.ai"><img src="https://img.shields.io/badge/Smoo_AI-platform-00A6A6?style=for-the-badge&labelColor=020618" alt="Smoo AI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-F49F0A?style=for-the-badge&labelColor=020618" alt="license"></a>
+  <a href="https://lom.smoo.ai"><img src="https://img.shields.io/badge/hosted-lom.smoo.ai-FF6B6C?style=for-the-badge&labelColor=020618" alt="lom.smoo.ai"></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/TypeScript-SST_v4-00A6A6?style=flat-square" alt="TypeScript / SST v4">
   <img src="https://img.shields.io/badge/k8s-Helm_%2B_ArgoCD-FF6B6C?style=flat-square" alt="Helm + ArgoCD">
-  <a href="https://lom.smoo.ai"><img src="https://img.shields.io/badge/hosted-lom.smoo.ai-020618?style=flat-square" alt="lom.smoo.ai"></a>
+  <img src="https://img.shields.io/badge/verify-tsc_%2B_helm_lint-00A6A6?style=flat-square" alt="verify: tsc + helm lint">
 </p>
 
 <p align="center">
-  <a href="#-features">Features</a> ·
-  <a href="#-install">Install</a> ·
-  <a href="#-usage">Usage</a> ·
-  <a href="#-part-of-smoo-ai">Platform</a>
+  <a href="#-features"><b>Features</b></a> &nbsp;·&nbsp; <a href="#-install"><b>Install</b></a> &nbsp;·&nbsp; <a href="#-usage"><b>Usage</b></a> &nbsp;·&nbsp; <a href="#-part-of-smoo-ai"><b>Platform</b></a>
 </p>
 
 ---
@@ -118,37 +113,34 @@ Defaults are sensible: the WebSocket route table covers `$connect`, `$disconnect
 ## 📖 Architecture — one agent, two deploy paths
 
 ```mermaid
-flowchart TB
-    SRC["smooth-operator (Rust agent)"]
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#020618','primaryColor':'#0b1426','primaryTextColor':'#e6edf6','primaryBorderColor':'#2b3a52',
+  'lineColor':'#7c8aa0','secondaryColor':'#0b1426','tertiaryColor':'#0b1426','fontFamily':'ui-sans-serif, system-ui, sans-serif',
+  'clusterBkg':'#0b1426','clusterBorder':'#22304a'}}}%%
+flowchart LR
+  SRC["smooth-operator<br/>Rust agent"]
 
-    subgraph aws["AWS serverless · SmoothAgentApi (SST v4)"]
-        WSAPI[API Gateway WebSocket]
-        LAM["Rust Lambda<br/>provided.al2023 / arm64"]
-        DDB[(DynamoDB single table)]
-        S3[(S3 blob bucket)]
-        VEC[(S3 Vectors index)]
-        SEC[gateway-key Secret]
-        WSAPI --> LAM
-        LAM --> DDB
-        LAM --> S3
-        LAM --> VEC
-        LAM --> SEC
-    end
+  subgraph aws["AWS serverless · SmoothAgentApi"]
+    LAM["Rust Lambda"]
+    STORE[("Dynamo · S3 · Vectors")]
+    LAM --> STORE
+  end
 
-    subgraph k8s["Kubernetes / self-host · smooth-operator Helm chart"]
-        ING[WebSocket Ingress]
-        DEP[axum /ws Deployment]
-        PG[("pgvector Postgres<br/>external")]
-        ARGO[ArgoCD Application]
-        ING --> DEP
-        DEP --> PG
-        ARGO -.->|syncs| DEP
-    end
+  subgraph k8s["Kubernetes · Helm + ArgoCD"]
+    DEP["axum /ws"]
+    PG[("pgvector Postgres")]
+    DEP --> PG
+  end
 
-    SRC -->|cargo lambda artifact| LAM
-    SRC -->|container image| DEP
-    LAM -.->|OpenAI-compatible| GW[(LLM gateway)]
-    DEP -.->|OpenAI-compatible| GW
+  SRC -->|lambda artifact| LAM
+  SRC -->|container image| DEP
+  LAM -.->|OpenAI-compatible| GW[("LLM gateway")]
+  DEP -.->|OpenAI-compatible| GW
+
+  classDef warm fill:#f49f0a,stroke:#ff6b6c,color:#1a0f00;
+  classDef teal fill:#00a6a6,stroke:#00c2c2,color:#011;
+  class SRC warm
+  class STORE,PG,GW teal
 ```
 
 The same agent ships as a Lambda artifact (serverless) or a container image (k8s). Both speak the same WebSocket protocol and call the same OpenAI-compatible LLM gateway — you pick the runtime, not the agent.
@@ -163,18 +155,19 @@ Infra you can't `cargo test` still has to be verified. This package proves corre
 - **Deployed via CI, never locally** — local deploys can ship unintended changes; the pipeline owns `sst deploy` / `argocd sync`.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#020618','primaryColor':'#0b1426','primaryTextColor':'#e6edf6','primaryBorderColor':'#2b3a52',
+  'lineColor':'#7c8aa0','secondaryColor':'#0b1426','tertiaryColor':'#0b1426','fontFamily':'ui-sans-serif, system-ui, sans-serif',
+  'clusterBkg':'#0b1426','clusterBorder':'#22304a'}}}%%
 flowchart TD
-    J["LLM-as-judge evals (engine)<br/>multi-turn quality, scored 0–5"]
-    E["kind-cluster smoke (CI)<br/>render → apply → schedules"]
-    C["Conformance<br/>helm lint + helm template + ArgoCD app"]
-    U["Construct typecheck<br/>sst install → tsc --noEmit"]
+  U["Construct typecheck<br/>sst install → tsc"] --> C["Conformance<br/>helm lint + template"]
+  C --> E["kind-cluster smoke<br/>render → apply"]
+  E --> J["LLM-as-judge evals<br/>multi-turn, scored 0–5"]
 
-    J --> E --> C --> U
-
-    style U fill:#1f7a3d,stroke:#0d3,color:#fff
-    style C fill:#2563eb,stroke:#08f,color:#fff
-    style E fill:#7c3aed,stroke:#a0f,color:#fff
-    style J fill:#b45309,stroke:#f90,color:#fff
+  classDef warm fill:#f49f0a,stroke:#ff6b6c,color:#1a0f00;
+  classDef teal fill:#00a6a6,stroke:#00c2c2,color:#011;
+  class U teal
+  class J warm
 ```
 
 Verify locally (no AWS creds, no deploy):
@@ -233,13 +226,12 @@ See [`helm/smooth-operator/README.md`](helm/smooth-operator/README.md) for the p
 
 ## 🧩 Part of Smoo AI {#part-of-smoo-ai}
 
-`@smooai/deploy` is part of the [Smoo AI](https://smoo.ai) platform — an AI-powered business platform with AI built into every product. It packages the deploy primitives behind the rest of the stack:
+`@smooai/deploy` is built and open-sourced by **[Smoo AI](https://smoo.ai)** — the AI-powered business platform with AI built into every product: CRM, customer support, campaigns, field service, observability, and developer tools.
 
-- [smooth-operator](https://github.com/SmooAI/smooth-operator) — the agent service this deploys
-- [smooth-operator-core](https://github.com/SmooAI/smooth-operator-core) — the Rust engine
-- [smooth](https://github.com/SmooAI/smooth) — the Smoo AI CLI (`th`) and orchestration platform
-- [chat-widget](https://github.com/SmooAI/chat-widget) — the embeddable widget
-- [**lom.smoo.ai**](https://lom.smoo.ai) — hosted agent service
+- 🧰 **More open source from Smoo AI** — [smoo.ai/open-source](https://smoo.ai/open-source)
+- 🤖 **The agent this deploys** — [smooth-operator](https://github.com/SmooAI/smooth-operator) · [smooth-operator-core](https://github.com/SmooAI/smooth-operator-core) (Rust engine)
+- 🧩 **Sibling packages** — [smooth](https://github.com/SmooAI/smooth) (the `th` CLI), [chat-widget](https://github.com/SmooAI/chat-widget)
+- ☁️ **Hosted** — [lom.smoo.ai](https://lom.smoo.ai) runs the smooth-operator service for you
 
 ## 🤝 Contributing
 
