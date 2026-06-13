@@ -1,32 +1,66 @@
 <p align="center">
-  <img src="./assets/smooth-logo.svg" alt="Smooth" width="360" />
+  <a href="https://smoo.ai"><img src="https://smoo.ai/images/logo/logo.svg" alt="Smoo AI" width="220" /></a>
+</p>
+
+<h1 align="center">@smooai/deploy</h1>
+
+<p align="center">
+  <strong>Deploy a smooth-operator agent two ways from one package — SST v4 constructs for AWS serverless, and a Helm chart + ArgoCD for Kubernetes.</strong>
 </p>
 
 <p align="center">
-  <strong>Deploy a smooth-operator agent two ways, from one package.</strong><br/>
-  Reusable SST v4 constructs for AWS serverless, and a Helm chart + ArgoCD for Kubernetes — the shared deploy primitives behind smooth-operator, dogfooded by smooai.
+  <img src="https://img.shields.io/badge/Smoo_AI-platform-00A6A6?style=flat-square" alt="Smoo AI">
+  <img src="https://img.shields.io/badge/license-MIT-F49F0A?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/TypeScript-SST_v4-00A6A6?style=flat-square" alt="TypeScript / SST v4">
+  <img src="https://img.shields.io/badge/k8s-Helm_%2B_ArgoCD-FF6B6C?style=flat-square" alt="Helm + ArgoCD">
+  <a href="https://lom.smoo.ai"><img src="https://img.shields.io/badge/hosted-lom.smoo.ai-020618?style=flat-square" alt="lom.smoo.ai"></a>
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/verify-tsc%20%2B%20helm%20lint-brightgreen.svg" alt="tsc + helm lint passing" />
-  <img src="https://img.shields.io/badge/SST-v4%20constructs-7c3aed.svg" alt="SST v4 constructs" />
-  <img src="https://img.shields.io/badge/k8s-Helm%20%2B%20ArgoCD-orange.svg" alt="Helm + ArgoCD" />
-  <a href="https://lom.smoo.ai"><img src="https://img.shields.io/badge/hosted-lom.smoo.ai-black.svg" alt="lom.smoo.ai" /></a>
+  <a href="#-features">Features</a> ·
+  <a href="#-install">Install</a> ·
+  <a href="#-usage">Usage</a> ·
+  <a href="#-part-of-smoo-ai">Platform</a>
 </p>
 
 ---
 
-`@smooai/deploy` packages the **deploy primitives** for a [smooth-operator](https://github.com/SmooAI/smooth-operator)-style agent so you don't hand-roll them per service. It gives you two production-shaped paths off the same conventions:
+> `@smooai/deploy` packages the deploy primitives for a [smooth-operator](https://github.com/SmooAI/smooth-operator)-style agent so you don't hand-roll them per service. The same agent ships to AWS serverless or Kubernetes off one set of conventions — you pick the runtime, not the agent.
+
+It gives you two production-shaped paths off the same conventions:
 
 - **AWS serverless** — `new SmoothAgentApi(...)`: an API Gateway WebSocket + (Rust) Lambda + DynamoDB single table + S3 blob bucket + S3 Vectors wiring + gateway-key secret + IAM links, as a single parameterized SST component.
 - **Kubernetes / self-host** — the `smooth-operator` Helm chart: an axum `/ws` server backed by pgvector Postgres, fronted by a WebSocket-friendly Ingress, synced by ArgoCD.
 
 Two real consumers justify the shared package: **smooth-operator** (the reference WebSocket agent service, uses both surfaces today) and the **smooai monorepo** (dogfoods the SST constructs piecemeal).
 
----
+## ✨ Features
 
-## Quickstart
+| You want… | `@smooai/deploy` gives you |
+| --- | --- |
+| **One construct**, whole serverless backend | `SmoothAgentApi`: WS API + Lambda + Dynamo + S3 + Vectors + secret + IAM |
+| **Composable** primitives | `WebSocketLambdaApi`, `DynamoSingleTable` exported independently |
+| **A Kubernetes path too** | the `smooth-operator` Helm chart + ArgoCD `Application` |
+| **No copy-paste between services** | the smooth-operator deploy logic, extracted and parameterized |
+| **Safe-by-default pods** | non-root, read-only rootfs, dropped caps, seccomp `RuntimeDefault` |
+| **WebSocket-aware Ingress** | long proxy timeouts + websocket annotations baked into chart defaults |
+
+## 📦 Install
+
+`@smooai/deploy` is consumed today via a **path dep** for local development:
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "@smooai/deploy": "file:../../deploy/sst"
+  }
+}
+```
+
+> **Publishing follow-up:** publish `@smooai/deploy` to npm (and the chart to an OCI/HTTP Helm repo) so consumers pin a version instead of a sibling-checkout path. See [`docs/Consuming.md`](docs/Consuming.md).
+
+## 🚀 Usage
 
 ### AWS serverless — one construct in your `sst.config.ts`
 
@@ -59,9 +93,7 @@ helm upgrade --install smooth-operator helm/smooth-operator \
 
 > Postgres with the **pgvector** extension is an external dependency (the chart does not vendor a Postgres pod). Point `database.urlSecretRef` at a pgvector-enabled database — see [`helm/smooth-operator/README.md`](helm/smooth-operator/README.md).
 
----
-
-## Showcase: compose the smaller primitives
+### Compose the smaller primitives
 
 `SmoothAgentApi` is the batteries-included path. When you want to assemble your own topology, the sub-constructs are first-class:
 
@@ -83,22 +115,7 @@ const { api } = WebSocketLambdaApi('AgentApi', {
 
 Defaults are sensible: the WebSocket route table covers `$connect`, `$disconnect`, `send_message`, `ping`, and `$default`; the gateway URL defaults to `https://llm.smoo.ai/v1`; the model defaults to `claude-haiku-4-5`.
 
----
-
-## Why this
-
-| You want… | @smooai/deploy gives you |
-| --- | --- |
-| **One construct**, whole serverless backend | `SmoothAgentApi`: WS API + Lambda + Dynamo + S3 + Vectors + secret + IAM |
-| **Composable** primitives | `WebSocketLambdaApi`, `DynamoSingleTable` exported independently |
-| **A Kubernetes path too** | the `smooth-operator` Helm chart + ArgoCD `Application` |
-| **No copy-paste between services** | the smooth-operator deploy logic, extracted and parameterized |
-| **Safe-by-default pods** | non-root, read-only rootfs, dropped caps, seccomp `RuntimeDefault` |
-| **WebSocket-aware Ingress** | long proxy timeouts + websocket annotations baked into chart defaults |
-
----
-
-## Architecture — one agent, two deploy paths
+## 📖 Architecture — one agent, two deploy paths
 
 ```mermaid
 flowchart TB
@@ -136,11 +153,9 @@ flowchart TB
 
 The same agent ships as a Lambda artifact (serverless) or a container image (k8s). Both speak the same WebSocket protocol and call the same OpenAI-compatible LLM gateway — you pick the runtime, not the agent.
 
----
+## 📖 Verified, not vibe-coded
 
-## Test-driven by default — verified, not vibe-coded
-
-Infra you can't `cargo test` still has to be **verified, not vibe-coded**. This package proves correctness without a live AWS account or cluster:
+Infra you can't `cargo test` still has to be verified. This package proves correctness without a live AWS account or cluster:
 
 - **SST constructs** typecheck against real SST platform types: `pnpm sst install` generates `.sst/platform`, then `tsc --noEmit` validates the constructs compile against the SDK surface — catching the SST footguns (unlinked resources, ambient-global misuse) that only `next build`-class checks surface.
 - **Helm chart** is linted and rendered: `helm lint` + `helm template` validate the chart and ArgoCD `Application` produce valid manifests.
@@ -175,9 +190,7 @@ helm template smooth-operator helm/smooth-operator
 
 > The full quality pyramid spans repos: the engine's **408 unit tests + LLM-as-judge evals** (which caught a multi-turn defect that scored 1/5 → fixed → 5/5) and the widget's **live Playwright e2e** sit above this package's static + smoke verification.
 
----
-
-## Constructs reference
+## 📖 Constructs reference
 
 | Export | What it is |
 | --- | --- |
@@ -198,9 +211,7 @@ helm template smooth-operator helm/smooth-operator
 
 > **The S3 Vectors gap:** SST v4 ships no native S3 Vectors component (the service went GA 2025-12). `SmoothAgentApi` declares the intended bucket/index names, wires them into the Lambda env, and grants `s3vectors:*` — but does not create the vector bucket/index as a first-class resource by default. Provision it out-of-band per the README until your AWS provider exposes `aws.s3vectors.*`.
 
----
-
-## Helm chart (`smooth-operator`)
+## 📖 Helm chart (`smooth-operator`)
 
 ```bash
 helm lint helm/smooth-operator
@@ -214,30 +225,32 @@ helm template smooth-operator helm/smooth-operator
 
 See [`helm/smooth-operator/README.md`](helm/smooth-operator/README.md) for the pgvector requirement, secret wiring, Ingress notes, and ArgoCD.
 
----
-
-## Smoo-powered or bring-your-own
+## 📖 Smoo-powered or bring-your-own
 
 **Bring-your-own:** deploy into *your* AWS account (SST) or *your* cluster (Helm/ArgoCD). Point the gateway URL at any OpenAI-compatible endpoint, bring your own pgvector Postgres or provision the S3 Vectors index yourself. You own the infra end to end.
 
 **Smoo-powered:** point the gateway at `https://llm.smoo.ai/v1` for unified billing + model routing, or skip the deploy entirely and let [**lom.smoo.ai**](https://lom.smoo.ai) run the smooth-operator service for you.
 
----
+## 🧩 Part of Smoo AI {#part-of-smoo-ai}
 
-## Publishing follow-up
+`@smooai/deploy` is part of the [Smoo AI](https://smoo.ai) platform — an AI-powered business platform with AI built into every product. It packages the deploy primitives behind the rest of the stack:
 
-`@smooai/deploy` is consumed today via a **path dep** (`"@smooai/deploy": "file:../../deploy/sst"`) for local development. The follow-up is to **publish `@smooai/deploy` to npm** (and the chart to an OCI/HTTP Helm repo) so consumers pin a version instead of a sibling-checkout path. See [`docs/Consuming.md`](docs/Consuming.md).
-
----
-
-## Links
-
-- [**lom.smoo.ai**](https://lom.smoo.ai) — hosted agent service
 - [smooth-operator](https://github.com/SmooAI/smooth-operator) — the agent service this deploys
 - [smooth-operator-core](https://github.com/SmooAI/smooth-operator-core) — the Rust engine
+- [smooth](https://github.com/SmooAI/smooth) — the Smoo AI CLI (`th`) and orchestration platform
 - [chat-widget](https://github.com/SmooAI/chat-widget) — the embeddable widget
-- [smoo.ai](https://smoo.ai) — the product · [github.com/SmooAI](https://github.com/SmooAI) — more open source
+- [**lom.smoo.ai**](https://lom.smoo.ai) — hosted agent service
 
-## License
+## 🤝 Contributing
+
+Issues and PRs welcome. Keep deploys in CI — never deploy locally.
+
+## 📄 License
 
 [MIT](LICENSE) © Smoo AI.
+
+---
+
+<p align="center">
+  Built by <a href="https://smoo.ai"><strong>Smoo AI</strong></a> — AI built into every product.
+</p>
