@@ -201,6 +201,53 @@ export interface SmooaiNextEdgeArgs {
     forwardViewerHost?: boolean;
     /** CloudFront price class. Defaults to `'PriceClass_100'` (NA + EU). */
     priceClass?: 'PriceClass_All' | 'PriceClass_200' | 'PriceClass_100';
+    /**
+     * Edge security-response-headers. CloudFront attaches these to **every**
+     * response (HTML, static assets, images, errors) via a
+     * `ResponseHeadersPolicy` — the right layer for security headers, since it
+     * covers paths the origin never serves and is consistent across every
+     * `@smooai/deploy` consumer.
+     *
+     * Defaults to `true` → a sensible baseline:
+     *   - `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`
+     *   - `X-Content-Type-Options: nosniff`
+     *   - `X-Frame-Options: SAMEORIGIN`
+     *   - `Referrer-Policy: strict-origin-when-cross-origin`
+     *   - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+     *
+     * Pass `false` to disable entirely, or an object to override individual
+     * values. **CSP is opt-in** (`contentSecurityPolicy`) — a strict policy
+     * needs an inline-script audit first, so it is omitted unless you set it
+     * (optionally `cspReportOnly: true` to ship it in report-only mode).
+     */
+    securityHeaders?:
+        | boolean
+        | {
+              /** HSTS max-age in seconds. Default `63072000` (2 years). Set `0` to omit HSTS. */
+              strictTransportSecurityMaxAge?: number;
+              /** Add `includeSubDomains` to HSTS. Default `true`. */
+              hstsIncludeSubdomains?: boolean;
+              /** Add `preload` to HSTS. Default `true`. */
+              hstsPreload?: boolean;
+              /** `X-Frame-Options` value. Default `'SAMEORIGIN'`. */
+              frameOption?: 'DENY' | 'SAMEORIGIN';
+              /** `Referrer-Policy` value. Default `'strict-origin-when-cross-origin'`. */
+              referrerPolicy?:
+                  | 'no-referrer'
+                  | 'no-referrer-when-downgrade'
+                  | 'origin'
+                  | 'origin-when-cross-origin'
+                  | 'same-origin'
+                  | 'strict-origin'
+                  | 'strict-origin-when-cross-origin'
+                  | 'unsafe-url';
+              /** `Permissions-Policy` value. Default `'camera=(), microphone=(), geolocation=()'`. Set `''` to omit. */
+              permissionsPolicy?: string;
+              /** Opt-in `Content-Security-Policy`. Omitted unless set. */
+              contentSecurityPolicy?: string;
+              /** Ship the CSP as `Content-Security-Policy-Report-Only`. Default `false`. */
+              cspReportOnly?: boolean;
+          };
     /** Pass-through `$transform`/component options for the distribution. */
     transform?: aws.cloudfront.DistributionArgs;
 }
@@ -269,6 +316,7 @@ export class SmooaiNextEdge {
             originShieldRegion = 'us-east-1',
             priceClass = 'PriceClass_100',
             forwardViewerHost = false,
+            securityHeaders = true,
         } = args;
 
         const allHosts = [domain, ...aliases];
@@ -476,6 +524,56 @@ export class SmooaiNextEdge {
             },
         });
 
+        // ── Security response-headers policy ───────────────────────────────
+        // Attached to EVERY behavior so HTML, static assets, optimized images,
+        // and error responses all carry the security baseline — the edge is the
+        // correct layer (covers paths the origin never serves, and is uniform
+        // across every consumer of this construct). CSP is opt-in: a strict
+        // policy needs an inline-script audit, so it is omitted unless provided.
+        const sh = securityHeaders === true ? {} : securityHeaders === false ? null : securityHeaders;
+        const securityHeadersPolicy =
+            sh === null
+                ? undefined
+                : new aws.cloudfront.ResponseHeadersPolicy(`${name}SecurityHeadersPolicy`, {
+                      name: $interpolate`${$app.name}-${$app.stage}-${name}-security`,
+                      comment: `SmooaiNextEdge security headers — ${domain}`,
+                      securityHeadersConfig: {
+                          contentTypeOptions: { override: true },
+                          frameOptions: { frameOption: sh.frameOption ?? 'SAMEORIGIN', override: true },
+                          referrerPolicy: { referrerPolicy: sh.referrerPolicy ?? 'strict-origin-when-cross-origin', override: true },
+                          ...((sh.strictTransportSecurityMaxAge ?? 63_072_000) > 0
+                              ? {
+                                    strictTransportSecurity: {
+                                        accessControlMaxAgeSec: sh.strictTransportSecurityMaxAge ?? 63_072_000,
+                                        includeSubdomains: sh.hstsIncludeSubdomains ?? true,
+                                        preload: sh.hstsPreload ?? true,
+                                        override: true,
+                                    },
+                                }
+                              : {}),
+                          ...(sh.contentSecurityPolicy && !sh.cspReportOnly
+                              ? {
+                                    contentSecurityPolicy: {
+                                        contentSecurityPolicy: sh.contentSecurityPolicy,
+                                        override: true,
+                                    },
+                                }
+                              : {}),
+                      },
+                      // Permissions-Policy + report-only CSP have no native slots — emit as custom headers.
+                      customHeadersConfig: {
+                          items: [
+                              ...((sh.permissionsPolicy ?? 'camera=(), microphone=(), geolocation=()')
+                                  ? [{ header: 'Permissions-Policy', value: sh.permissionsPolicy ?? 'camera=(), microphone=(), geolocation=()', override: true }]
+                                  : []),
+                              ...(sh.contentSecurityPolicy && sh.cspReportOnly
+                                  ? [{ header: 'Content-Security-Policy-Report-Only', value: sh.contentSecurityPolicy, override: true }]
+                                  : []),
+                          ],
+                      },
+                  });
+        const securityHeadersPolicyId = securityHeadersPolicy?.id;
+
         // Origin-request policy for the dynamic (default) behavior.
         //
         // Default (`forwardViewerHost: false`): the AWS-managed
@@ -536,6 +634,7 @@ export class SmooaiNextEdge {
                 compress: true,
                 cachePolicyId: htmlPolicy.id,
                 originRequestPolicyId: defaultOriginRequestPolicyId,
+                ...(securityHeadersPolicyId ? { responseHeadersPolicyId: securityHeadersPolicyId } : {}),
             },
             orderedCacheBehaviors: [
                 // Immutable build assets — long-cache, forward nothing.
@@ -547,6 +646,7 @@ export class SmooaiNextEdge {
                     cachedMethods: ['GET', 'HEAD'],
                     compress: true,
                     cachePolicyId: immutablePolicy.id,
+                    ...(securityHeadersPolicyId ? { responseHeadersPolicyId: securityHeadersPolicyId } : {}),
                 },
                 // Optimized images — edge-cache, offload per-pod optimization.
                 {
@@ -557,6 +657,7 @@ export class SmooaiNextEdge {
                     cachedMethods: ['GET', 'HEAD'],
                     compress: true,
                     cachePolicyId: imagePolicy.id,
+                    ...(securityHeadersPolicyId ? { responseHeadersPolicyId: securityHeadersPolicyId } : {}),
                 },
             ],
             restrictions: {
