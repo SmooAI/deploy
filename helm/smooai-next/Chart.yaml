@@ -23,7 +23,11 @@ type: application
 #        (SMOODEV-1790 — dogfooding the chart for smooai apps/web).
 # 0.2.1: PDB sets unhealthyPodEvictionPolicy (default AlwaysAllow) — kube-linter
 #        flags its absence; matches the prior hand-rolled PDB.
-version: 0.2.1
+# 0.2.2: expose hpa.memoryTarget — optional second HPA Resource metric (memory
+#        averageUtilization) so memory-pressured Next.js pods scale out instead
+#        of riding into a V8 heap-limit OOM (SMOODEV-1965). Default 0 = CPU-only,
+#        backward-compatible.
+version: 0.2.2
 # Tracks the consuming app image version (override via image.tag).
 appVersion: "0.1.0"
 home: https://github.com/SmooAI/deploy

@@ -45,6 +45,14 @@ hpa:
   min: 2
   max: 10
   cpuTarget: 70
+  # Optional memory-based scale-out target — averageUtilization as a % of the
+  # memory REQUEST (resources.requests.memory below). Unset/0 = CPU-only (the
+  # default; backward-compatible). Set e.g. 80 to add a second HPA metric so a
+  # memory-pressured Next.js workload scales out instead of riding each pod into
+  # a V8 heap-limit OOM. The HPA scales UP when EITHER cpu or memory is hot and
+  # DOWN only when BOTH are cool, so set this comfortably ABOVE steady-state
+  # (memory-used ÷ memory-request) or it will pin the deployment at max.
+  memoryTarget: 0
   # Optional autoscaling/v2 scaling behavior (scaleUp/scaleDown stabilization
   # windows + policies). Empty = the autoscaler's built-in defaults. Example:
   #   behavior:
