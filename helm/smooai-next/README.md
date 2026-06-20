@@ -28,7 +28,7 @@ helm/smooai-next/
 │   ├── _helpers.tpl
 │   ├── deployment.yaml               # node server.js; graceful shutdown; /api/health probes; S3 cache env
 │   ├── service.yaml                  # ClusterIP, port → http (3000)
-│   ├── hpa.yaml                      # HPA (min/max/cpuTarget)
+│   ├── hpa.yaml                      # HPA (min/max/cpuTarget; optional memoryTarget)
 │   ├── pdb.yaml                      # PodDisruptionBudget (minAvailable)
 │   ├── serviceaccount.yaml           # IRSA-annotated ServiceAccount
 │   ├── ingress.yaml                  # dedicated internet-facing ALB = the CloudFront origin

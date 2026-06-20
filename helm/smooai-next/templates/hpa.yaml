@@ -19,6 +19,19 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.hpa.cpuTarget }}
+    {{- with .Values.hpa.memoryTarget }}
+    # Optional memory-based scale-out (averageUtilization is % of the memory
+    # REQUEST). The HPA scales UP when EITHER metric is hot and DOWN only when
+    # BOTH are cool — so memory-pressured Next.js pods add replicas instead of
+    # riding individual pods into a V8 heap-limit OOM. `with` skips this when
+    # memoryTarget is unset/0, keeping the default CPU-only behavior unchanged.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
   {{- with .Values.hpa.behavior }}
   # Optional v2 scaling behavior (scaleUp/scaleDown stabilization + policies).
   behavior:
