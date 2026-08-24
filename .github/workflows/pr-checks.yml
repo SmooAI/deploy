@@ -30,6 +30,12 @@ jobs:
 
             - uses: pnpm/action-setup@v4
 
+              with:
+
+                  # this repo has no root package.json — the pnpm pin lives in sst/
+
+                  package_json_file: sst/package.json
+
             # Toolchains come from mise.toml, read here by mise-action so the runner
             # and a developer's shell resolve identical versions.
             - name: Setup toolchains (mise)
