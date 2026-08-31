@@ -98,7 +98,20 @@ export function WebSocketLambdaApi(name: string, args: WebSocketLambdaApiArgs): 
 
     for (const r of routes) {
         api.route(r.routeKey, {
-            handler: args.handler,
+            // `bundle` + `handler`, NOT `handler` alone. `args.handler` is a
+            // PREBUILT artifact directory (cargo-lambda output containing
+            // `bootstrap`) — SST's `bundle` is the documented way to say "I built
+            // this myself, skip bundling".
+            //
+            // Passing it as `handler` instead makes SST try to BUILD it, and it
+            // dispatches its builder on the runtime string. There is no builder
+            // registered for the literal `provided.al2023` (SST expects `rust` or
+            // `go` as the build input and maps those to it), so every route failed
+            // with `Runtime not found: provided.al2023` — after successfully
+            // creating its log group and role, which made it look like a
+            // permissions problem rather than a build one.
+            bundle: args.handler,
+            handler: 'bootstrap',
             runtime: args.runtime ?? 'provided.al2023',
             architecture: args.architecture ?? 'arm64',
             timeout: r.timeout,
