@@ -53,6 +53,9 @@ jobs:
             - name: Typecheck (tsc --noEmit)
               run: pnpm typecheck
 
+            - name: Cache handler tests (node --test)
+              run: pnpm test
+
     # ── Helm chart: lint + render smoke + schema validate ────────────────────
     helm-chart:
         name: Helm chart

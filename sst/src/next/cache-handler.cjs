@@ -158,11 +158,23 @@ function isFetch(ctx) {
 }
 
 // Buffer-aware (de)serialization: preserve Buffers faithfully across the wire.
+// JSON.stringify calls Buffer#toJSON *before* the replacer, so `v` is already
+// `{ type: 'Buffer', data }` — read the raw value off the holder (`this[k]`).
 function serialize(entry) {
-    return JSON.stringify(entry, (_k, v) => (Buffer.isBuffer(v) ? { __b64: v.toString('base64') } : v));
+    return JSON.stringify(entry, function (k, v) {
+        const raw = this[k];
+        return Buffer.isBuffer(raw) ? { __b64: raw.toString('base64') } : v;
+    });
 }
 function deserialize(str) {
-    return JSON.parse(str, (_k, v) => (v && typeof v === 'object' && typeof v.__b64 === 'string' ? Buffer.from(v.__b64, 'base64') : v));
+    return JSON.parse(str, (_k, v) => {
+        if (!v || typeof v !== 'object') return v;
+        if (typeof v.__b64 === 'string') return Buffer.from(v.__b64, 'base64');
+        // Entries written before the fix above carry Buffer#toJSON's shape; Next
+        // would write that object to the response as "[object Object]".
+        if (v.type === 'Buffer' && Array.isArray(v.data)) return Buffer.from(v.data);
+        return v;
+    });
 }
 
 async function streamToString(body) {
