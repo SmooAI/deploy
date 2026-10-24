@@ -53,3 +53,32 @@ test('an entry written before the fix ({ type: "Buffer", data }) still decodes t
     assert.ok(Buffer.isBuffer(hit.value.body));
     assert.deepEqual(hit.value.body, PNG);
 });
+
+// SMOODEV-4146: Next 16 keeps an APP_PAGE's per-segment prefetch payloads in a
+// Map. JSON.stringify turned it into {}, so on a hit Next's
+// `cachedData.segmentData.get(...)` threw and every segment prefetch of a cached
+// page (Next-Router-Segment-Prefetch: /_tree) answered 500.
+const RSC = Buffer.from('0:{"tree":1}');
+const SEGMENTS = new Map([
+    ['/_tree', Buffer.from('tree-payload')],
+    ['/_index', Buffer.from('index-payload')],
+]);
+
+test('an APP_PAGE segmentData Map round-trips as a Map of Buffers', async () => {
+    const handler = new S3CacheHandler({});
+    await handler.set('/help', { kind: 'APP_PAGE', html: '<html></html>', rscData: RSC, segmentData: SEGMENTS, status: 200, headers: {} }, {});
+    const hit = await handler.get('/help', {});
+    assert.ok(hit.value.segmentData instanceof Map, 'segmentData should be a Map');
+    assert.deepEqual([...hit.value.segmentData.keys()], ['/_tree', '/_index']);
+    assert.ok(Buffer.isBuffer(hit.value.segmentData.get('/_tree')));
+    assert.deepEqual(hit.value.segmentData.get('/_tree'), SEGMENTS.get('/_tree'));
+    assert.deepEqual(hit.value.rscData, RSC);
+});
+
+test('an APP_PAGE written before the fix (segmentData lost as {}) is a miss, so Next regenerates it', async () => {
+    objects.set(
+        'next-cache/test-build/privacy-policy.cache',
+        JSON.stringify({ value: { kind: 'APP_PAGE', html: '<html></html>', rscData: { __b64: RSC.toString('base64') }, segmentData: {} }, lastModified: 1 }),
+    );
+    assert.equal(await new S3CacheHandler({}).get('/privacy-policy', {}), null);
+});
