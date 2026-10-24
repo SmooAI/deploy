@@ -160,16 +160,23 @@ function isFetch(ctx) {
 // Buffer-aware (de)serialization: preserve Buffers faithfully across the wire.
 // JSON.stringify calls Buffer#toJSON *before* the replacer, so `v` is already
 // `{ type: 'Buffer', data }` — read the raw value off the holder (`this[k]`).
+// Maps (an APP_PAGE's `segmentData`) have no JSON form at all and stringified to
+// `{}` (SMOODEV-4146), so they travel as `{ __map: [[key, value], …] }`; the
+// replacer then recurses into the entries, so their Buffers are encoded too.
 function serialize(entry) {
     return JSON.stringify(entry, function (k, v) {
         const raw = this[k];
-        return Buffer.isBuffer(raw) ? { __b64: raw.toString('base64') } : v;
+        if (Buffer.isBuffer(raw)) return { __b64: raw.toString('base64') };
+        if (raw instanceof Map) return { __map: [...raw.entries()] };
+        return v;
     });
 }
 function deserialize(str) {
     return JSON.parse(str, (_k, v) => {
         if (!v || typeof v !== 'object') return v;
         if (typeof v.__b64 === 'string') return Buffer.from(v.__b64, 'base64');
+        // The reviver runs bottom-up, so the entries' Buffers are already decoded.
+        if (Array.isArray(v.__map)) return new Map(v.__map);
         // Entries written before the fix above carry Buffer#toJSON's shape; Next
         // would write that object to the response as "[object Object]".
         if (v.type === 'Buffer' && Array.isArray(v.data)) return Buffer.from(v.data);
@@ -196,6 +203,13 @@ module.exports = class S3CacheHandler {
         try {
             const res = await s.s3.send(new s.GetObjectCommand({ Bucket: s.bucket, Key: s3Key(s.prefix, key, fetchKind) }));
             const entry = deserialize(await streamToString(res.Body));
+            // Written before the Map fix: its segment payloads are gone (`{}`), and
+            // Next's `segmentData.get(...)` would throw on it. Regenerate instead.
+            const segmentData = entry.value && entry.value.segmentData;
+            if (segmentData && !(segmentData instanceof Map)) {
+                emit({ type: 'miss', op: 'get', key, fetch: fetchKind });
+                return null;
+            }
             emit({ type: 'hit', op: 'get', key, fetch: fetchKind });
             return { lastModified: entry.lastModified, value: entry.value };
         } catch (e) {
